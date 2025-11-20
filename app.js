@@ -285,6 +285,13 @@ document.getElementById('uploadForm').addEventListener('submit', async (e) => {
         return;
     }
 
+    // Check file size (recommend under 50MB for IndexedDB)
+    const maxSize = 50 * 1024 * 1024; // 50MB
+    if (currentFile.size > maxSize) {
+        showToast('File too large! Please choose a file under 50MB');
+        return;
+    }
+
     const title = document.getElementById('uploadTitle').value;
     const description = document.getElementById('uploadDescription').value;
     const category = document.getElementById('uploadCategory').value;
@@ -330,7 +337,7 @@ document.getElementById('uploadForm').addEventListener('submit', async (e) => {
     } catch (error) {
         console.error('Error uploading file:', error);
         showLoading(false);
-        showToast('Error uploading file. It might be too large.');
+        showToast('Upload failed: ' + (error.message || 'Unknown error'));
     }
 });
 
