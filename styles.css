@@ -1000,10 +1000,13 @@ body {
 .chat-messages {
     flex: 1;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 0.5rem;
     display: flex;
     flex-direction: column;
     gap: 0;
+    height: 100%;
+    scroll-behavior: smooth;
 }
 
 .message {
@@ -1011,9 +1014,10 @@ body {
     align-items: flex-start;
     gap: 0.75rem;
     padding: 0.75rem;
-    transition: background 0.2s;
-    animation: slideIn 0.3s ease-out;
+    transition: background 0.2s ease;
+    animation: slideIn 0.2s ease-out;
     border-radius: 8px;
+    will-change: transform, opacity;
 }
 
 .message:hover {
@@ -1222,6 +1226,36 @@ body {
     border-radius: 15px;
     font-size: 0.8rem;
     color: var(--text-secondary);
+}
+
+/* Games */
+.games-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+}
+
+.game-card {
+    padding: 2rem 1rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s;
+    border-radius: 15px;
+}
+
+.game-card:hover {
+    transform: translateY(-5px);
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.game-card h3 {
+    margin: 1rem 0 0.5rem;
+    font-size: 1.1rem;
+}
+
+.game-card p {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
 }
 
 .message-input-container {

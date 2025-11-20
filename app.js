@@ -1,7 +1,19 @@
 // IndexedDB setup
 let db;
 const DB_NAME = 'FreeViewChatDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
+
+// Generate or get user ID
+const USER_ID = localStorage.getItem('userID') || (() => {
+    const id = 'user_' + Math.random().toString(36).substr(2, 9);
+    localStorage.setItem('userID', id);
+    return id;
+})();
+
+// Banned words for automod
+const BANNED_WORDS = ['spam', 'hate', 'badword1', 'badword2'];
+let bannedUsers = JSON.parse(localStorage.getItem('bannedUsers') || '[]');
+let userBanCount = JSON.parse(localStorage.getItem('userBanCount') || '{}');
 
 // Initialize IndexedDB
 function initDB() {
@@ -20,6 +32,7 @@ function initDB() {
             if (!db.objectStoreNames.contains('messages')) {
                 const messagesStore = db.createObjectStore('messages', { keyPath: 'id', autoIncrement: true });
                 messagesStore.createIndex('timestamp', 'timestamp', { unique: false });
+                messagesStore.createIndex('userId', 'userId', { unique: false });
             }
         };
     });
@@ -72,11 +85,58 @@ let typingTimeout;
 let isUserScrolling = false;
 let messageReactions = {}; // Store reactions per message ID
 
+// Automod functions
+function checkAutomod(text) {
+    const lowerText = text.toLowerCase();
+    for (const word of BANNED_WORDS) {
+        if (lowerText.includes(word)) {
+            return word;
+        }
+    }
+    return null;
+}
+
+function banUser(userId) {
+    if (!bannedUsers.includes(userId)) {
+        bannedUsers.push(userId);
+        localStorage.setItem('bannedUsers', JSON.stringify(bannedUsers));
+    }
+    if (!userBanCount[userId]) {
+        userBanCount[userId] = 0;
+    }
+    userBanCount[userId]++;
+    localStorage.setItem('userBanCount', JSON.stringify(userBanCount));
+}
+
+function isUserBanned(userId) {
+    return bannedUsers.includes(userId);
+}
+
 // Send text message
 async function sendMessage() {
     const text = messageInput.value.trim();
 
     if (!text) return;
+
+    // Check if user is banned
+    if (isUserBanned(USER_ID)) {
+        showToast('❌ You are banned from this chat');
+        messageInput.value = '';
+        return;
+    }
+
+    // Check automod
+    const bannedWord = checkAutomod(text);
+    if (bannedWord) {
+        banUser(USER_ID);
+        showToast(`⚠️ Automod: Banned for using "${bannedWord}". Strike ${userBanCount[USER_ID] || 1}/3`);
+        messageInput.value = '';
+
+        if (userBanCount[USER_ID] >= 3) {
+            showToast('❌ You have been permanently banned');
+        }
+        return;
+    }
 
     showLoading(true);
 
@@ -84,6 +144,7 @@ async function sendMessage() {
         const messageData = {
             text,
             image: null,
+            userId: USER_ID,
             timestamp: Date.now(),
             date: new Date().toLocaleString()
         };
@@ -106,6 +167,12 @@ async function sendMessage() {
 async function sendImage(file) {
     if (!file) return;
 
+    // Check if user is banned
+    if (isUserBanned(USER_ID)) {
+        showToast('❌ You are banned from this chat');
+        return;
+    }
+
     // Check file size (max 5MB)
     const maxSize = 5 * 1024 * 1024;
     if (file.size > maxSize) {
@@ -121,6 +188,7 @@ async function sendImage(file) {
             const messageData = {
                 text: '',
                 image: e.target.result,
+                userId: USER_ID,
                 timestamp: Date.now(),
                 date: new Date().toLocaleString()
             };
@@ -210,12 +278,15 @@ function createMessageElement(message) {
         contentHtml += `<div class="message-text">${escapeHtml(message.text)}</div>`;
     }
 
+    const isCurrentUser = message.userId === USER_ID;
+    const verifiedBadge = isCurrentUser ? '<i class="fas fa-check-circle verified" title="Verified"></i>' : '';
+
     messageDiv.innerHTML = `
         ${avatarHtml}
         <div class="message-content">
             <div class="message-header">
-                <span class="message-author">Anonymous</span>
-                <i class="fas fa-check-circle verified" title="Verified"></i>
+                <span class="message-author">${isCurrentUser ? 'You' : 'Anonymous'}</span>
+                ${verifiedBadge}
                 <span class="message-time">${formatTime(message.timestamp)}</span>
             </div>
             ${contentHtml}
@@ -391,6 +462,66 @@ function playSoundEffect(type) {
     }
 }
 
+// Games functions
+const gamesModal = document.getElementById('gamesModal');
+const closeGamesModal = document.getElementById('closeGamesModal');
+const gameResult = document.getElementById('gameResult');
+const gameResultText = document.getElementById('gameResultText');
+
+function showGameResult(text) {
+    gameResultText.textContent = text;
+    gameResult.style.display = 'block';
+    playSoundEffect('message');
+}
+
+function playDice() {
+    const roll = Math.floor(Math.random() * 6) + 1;
+    showGameResult(`🎲 You rolled a ${roll}!`);
+}
+
+function playCoinFlip() {
+    const result = Math.random() > 0.5 ? 'Heads' : 'Tails';
+    showGameResult(`🪙 ${result}!`);
+}
+
+function playNumberGuess() {
+    const userGuess = prompt('Guess a number between 1-10:');
+    if (!userGuess) return;
+
+    const number = Math.floor(Math.random() * 10) + 1;
+    const guess = parseInt(userGuess);
+
+    if (guess === number) {
+        showGameResult(`🎉 Correct! The number was ${number}!`);
+    } else {
+        showGameResult(`❌ Wrong! You guessed ${guess}, it was ${number}`);
+    }
+}
+
+function playRPS() {
+    const choices = ['Rock', 'Paper', 'Scissors'];
+    const userChoice = prompt('Choose: Rock, Paper, or Scissors');
+    if (!userChoice) return;
+
+    const botChoice = choices[Math.floor(Math.random() * 3)];
+    const user = userChoice.charAt(0).toUpperCase() + userChoice.slice(1).toLowerCase();
+
+    let result;
+    if (user === botChoice) {
+        result = `🤝 Tie! Both chose ${user}`;
+    } else if (
+        (user === 'Rock' && botChoice === 'Scissors') ||
+        (user === 'Paper' && botChoice === 'Rock') ||
+        (user === 'Scissors' && botChoice === 'Paper')
+    ) {
+        result = `🎉 You Win! ${user} beats ${botChoice}`;
+    } else {
+        result = `😢 You Lose! ${botChoice} beats ${user}`;
+    }
+
+    showGameResult(result);
+}
+
 // Event listeners
 sendBtn.addEventListener('click', sendMessage);
 
@@ -422,6 +553,20 @@ imageInput.addEventListener('change', (e) => {
         sendImage(file);
     }
     imageInput.value = ''; // Reset input
+});
+
+// Games modal
+document.getElementById('gamesBtn').addEventListener('click', () => {
+    gamesModal.classList.add('active');
+    gameResult.style.display = 'none';
+});
+
+closeGamesModal.addEventListener('click', () => {
+    gamesModal.classList.remove('active');
+});
+
+document.querySelector('#gamesModal .modal-overlay').addEventListener('click', () => {
+    gamesModal.classList.remove('active');
 });
 
 // Utility functions
