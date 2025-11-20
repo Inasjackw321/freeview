@@ -171,31 +171,61 @@ function createMessageElement(message) {
     const messageDiv = document.createElement('div');
     messageDiv.className = 'message';
 
-    const headerHtml = `
-        <div class="message-header">
-            <i class="fas fa-user-circle"></i>
-            <span>Anonymous</span>
-            <i class="fas fa-check-circle verified" title="Verified"></i>
-            <span class="message-time">${message.date}</span>
+    // Random color for avatar
+    const colors = ['#667eea', '#764ba2', '#f093fb', '#4ade80', '#fbbf24', '#f87171', '#60a5fa', '#a78bfa'];
+    const avatarColor = colors[Math.floor(Math.random() * colors.length)];
+
+    const avatarHtml = `
+        <div class="message-avatar" style="background: ${avatarColor};">
+            <i class="fas fa-user"></i>
         </div>
     `;
 
-    let bubbleContent = '';
+    let contentHtml = '';
     if (message.text) {
-        bubbleContent += `<div>${escapeHtml(message.text)}</div>`;
+        contentHtml += `<div class="message-text">${escapeHtml(message.text)}</div>`;
     }
     if (message.image) {
-        bubbleContent += `<img src="${message.image}" alt="Shared image" onclick="previewImageFull('${message.image}')">`;
+        const img = document.createElement('img');
+        img.src = message.image;
+        img.className = 'message-image';
+        img.onclick = () => previewImageFull(message.image);
     }
 
     messageDiv.innerHTML = `
-        ${headerHtml}
-        <div class="message-bubble">
-            ${bubbleContent}
+        ${avatarHtml}
+        <div class="message-content">
+            <div class="message-header">
+                <span class="message-author">Anonymous</span>
+                <i class="fas fa-check-circle verified" title="Verified"></i>
+                <span class="message-time">${formatTime(message.timestamp)}</span>
+            </div>
+            ${contentHtml}
         </div>
     `;
 
+    // Add image if exists
+    if (message.image) {
+        const img = messageDiv.querySelector('.message-content').appendChild(document.createElement('img'));
+        img.src = message.image;
+        img.className = 'message-image';
+        img.onclick = () => previewImageFull(message.image);
+    }
+
     return messageDiv;
+}
+
+// Format timestamp
+function formatTime(timestamp) {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+
+    if (diffMins < 1) return 'just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h ago`;
+    return date.toLocaleDateString();
 }
 
 // Preview image in modal
