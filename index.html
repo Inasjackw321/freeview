@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FreeView - Share & Create</title>
+    <title>FreeView - Live Chat</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -18,178 +18,43 @@
     <!-- Header -->
     <header class="header glass">
         <div class="logo">
-            <i class="fas fa-play-circle"></i>
-            <span>FreeView</span>
+            <i class="fas fa-comments"></i>
+            <span>FreeView Chat</span>
+        </div>
+        <div class="header-info">
+            <i class="fas fa-user-circle"></i>
+            <span>Anonymous</span>
+            <i class="fas fa-check-circle verified" title="Verified"></i>
         </div>
     </header>
 
-    <!-- Tab Navigation -->
-    <div class="tab-nav glass">
-        <button class="tab-btn active" data-tab="create">
-            <i class="fas fa-plus-circle"></i>
-            Create
-        </button>
-        <button class="tab-btn" data-tab="browse">
-            <i class="fas fa-compass"></i>
-            Browse
-        </button>
-    </div>
-
-    <!-- Create Tab -->
-    <div class="tab-content active" id="create-tab">
-        <div class="container">
-            <div class="create-header">
-                <h2>Create New Document</h2>
-                <p>Write and share documents with rich text formatting</p>
-            </div>
-
-            <!-- Document Creator -->
-            <div class="creator-section active" id="document-creator">
-                <div class="card glass">
-                    <form id="documentForm">
-                        <div class="form-group">
-                            <input type="text" id="docTitle" placeholder="Document Title" required>
-                        </div>
-
-                        <!-- Text Editor Toolbar -->
-                        <div class="editor-toolbar">
-                            <button type="button" class="toolbar-btn" data-command="bold" title="Bold">
-                                <i class="fas fa-bold"></i>
-                            </button>
-                            <button type="button" class="toolbar-btn" data-command="italic" title="Italic">
-                                <i class="fas fa-italic"></i>
-                            </button>
-                            <button type="button" class="toolbar-btn" data-command="underline" title="Underline">
-                                <i class="fas fa-underline"></i>
-                            </button>
-                            <div class="toolbar-divider"></div>
-                            <button type="button" class="toolbar-btn" data-command="insertUnorderedList" title="Bullet List">
-                                <i class="fas fa-list-ul"></i>
-                            </button>
-                            <button type="button" class="toolbar-btn" data-command="insertOrderedList" title="Numbered List">
-                                <i class="fas fa-list-ol"></i>
-                            </button>
-                            <div class="toolbar-divider"></div>
-                            <button type="button" class="toolbar-btn" data-command="justifyLeft" title="Align Left">
-                                <i class="fas fa-align-left"></i>
-                            </button>
-                            <button type="button" class="toolbar-btn" data-command="justifyCenter" title="Align Center">
-                                <i class="fas fa-align-center"></i>
-                            </button>
-                            <button type="button" class="toolbar-btn" data-command="justifyRight" title="Align Right">
-                                <i class="fas fa-align-right"></i>
-                            </button>
-                            <div class="toolbar-divider"></div>
-                            <select class="toolbar-select" id="fontSize">
-                                <option value="1">Small</option>
-                                <option value="3" selected>Normal</option>
-                                <option value="5">Large</option>
-                                <option value="7">Huge</option>
-                            </select>
-                            <input type="color" class="toolbar-color" id="textColor" value="#ffffff" title="Text Color">
-                        </div>
-
-                        <!-- Rich Text Editor -->
-                        <div class="editor" id="editor" contenteditable="true" placeholder="Start writing your document..."></div>
-
-                        <div class="form-group">
-                            <select id="docCategory">
-                                <option value="general">General</option>
-                                <option value="education">Education</option>
-                                <option value="entertainment">Entertainment</option>
-                                <option value="technology">Technology</option>
-                                <option value="business">Business</option>
-                            </select>
-                        </div>
-
-                        <button type="submit" class="submit-btn">
-                            <i class="fas fa-check"></i>
-                            Publish Document
-                        </button>
-                    </form>
-                </div>
-            </div>
+    <!-- Chat Container -->
+    <div class="chat-container">
+        <div class="chat-messages" id="chatMessages">
+            <!-- Messages will be inserted here -->
         </div>
     </div>
 
-    <!-- Browse Tab -->
-    <div class="tab-content" id="browse-tab">
-        <div class="container">
-            <div class="browse-header">
-                <h2>All Documents</h2>
-            </div>
-
-            <div class="content-grid" id="contentGrid">
-                <!-- Content cards will be inserted here -->
-            </div>
-
-            <div class="no-content" id="noContent">
-                <i class="fas fa-inbox"></i>
-                <p>No documents yet. Create one!</p>
-            </div>
-        </div>
+    <!-- Message Input -->
+    <div class="message-input-container glass">
+        <button class="image-btn" id="imageBtn" title="Send Image">
+            <i class="fas fa-image"></i>
+        </button>
+        <input type="file" id="imageInput" accept="image/*" style="display: none;">
+        <input type="text" id="messageInput" placeholder="Type a message..." autocomplete="off">
+        <button class="send-btn" id="sendBtn">
+            <i class="fas fa-paper-plane"></i>
+        </button>
     </div>
 
-    <!-- Content Detail Modal -->
-    <div class="modal" id="detailModal">
+    <!-- Image Preview Modal -->
+    <div class="modal" id="imagePreviewModal">
         <div class="modal-overlay"></div>
-        <div class="modal-content glass">
-            <button class="close-btn" id="closeModal">
+        <div class="modal-content glass" style="max-width: 90%; max-height: 90vh; overflow: auto;">
+            <button class="close-btn" id="closePreviewModal">
                 <i class="fas fa-times"></i>
             </button>
-
-            <div class="detail-view">
-                <!-- Content Viewer -->
-                <div class="viewer-container">
-                    <div id="documentViewer" class="document-viewer"></div>
-                </div>
-
-                <!-- Content Info -->
-                <div class="detail-info">
-                    <h2 id="detailTitle"></h2>
-                    <div class="author-info">
-                        <i class="fas fa-user-circle"></i>
-                        <span>Anonymous User</span>
-                        <i class="fas fa-check-circle verified" title="Verified"></i>
-                        <span class="date" id="detailDate"></span>
-                    </div>
-
-                    <div class="action-bar">
-                        <button class="action-btn" id="likeBtn">
-                            <i class="far fa-heart"></i>
-                            <span id="likeCount">0</span>
-                        </button>
-                        <button class="action-btn" id="downloadBtn">
-                            <i class="fas fa-download"></i>
-                            <span>Download</span>
-                        </button>
-                        <button class="action-btn" id="shareBtn">
-                            <i class="fas fa-share"></i>
-                            <span>Share</span>
-                        </button>
-                    </div>
-
-                    <div class="description-section" id="detailDescription">
-                    </div>
-
-                    <!-- Comments -->
-                    <div class="comments-container">
-                        <h3><span id="commentCount">0</span> Comments</h3>
-
-                        <div class="comment-input">
-                            <i class="fas fa-user-circle"></i>
-                            <input type="text" id="commentInput" placeholder="Add a comment...">
-                            <button id="commentBtn">
-                                <i class="fas fa-paper-plane"></i>
-                            </button>
-                        </div>
-
-                        <div class="comments-list" id="commentsList">
-                            <!-- Comments will be inserted here -->
-                        </div>
-                    </div>
-                </div>
-            </div>
+            <img id="previewImage" style="width: 100%; height: auto; border-radius: 1rem;">
         </div>
     </div>
 

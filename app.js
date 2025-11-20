@@ -1,7 +1,7 @@
 // IndexedDB setup
 let db;
-const DB_NAME = 'FreeViewDB';
-const DB_VERSION = 2;
+const DB_NAME = 'FreeViewChatDB';
+const DB_VERSION = 1;
 
 // Initialize IndexedDB
 function initDB() {
@@ -17,469 +17,226 @@ function initDB() {
         request.onupgradeneeded = (event) => {
             db = event.target.result;
 
-            if (!db.objectStoreNames.contains('content')) {
-                const contentStore = db.createObjectStore('content', { keyPath: 'id', autoIncrement: true });
-                contentStore.createIndex('timestamp', 'timestamp', { unique: false });
-                contentStore.createIndex('type', 'type', { unique: false });
-            }
-
-            if (!db.objectStoreNames.contains('comments')) {
-                const commentsStore = db.createObjectStore('comments', { keyPath: 'id', autoIncrement: true });
-                commentsStore.createIndex('contentId', 'contentId', { unique: false });
-            }
-
-            if (!db.objectStoreNames.contains('likes')) {
-                db.createObjectStore('likes', { keyPath: 'contentId' });
+            if (!db.objectStoreNames.contains('messages')) {
+                const messagesStore = db.createObjectStore('messages', { keyPath: 'id', autoIncrement: true });
+                messagesStore.createIndex('timestamp', 'timestamp', { unique: false });
             }
         };
     });
 }
 
 // Database operations
-async function addContent(data) {
+async function addMessage(data) {
     return new Promise((resolve, reject) => {
         if (!db) {
             reject(new Error('Database not initialized'));
             return;
         }
-        const transaction = db.transaction(['content'], 'readwrite');
-        const store = transaction.objectStore('content');
+        const transaction = db.transaction(['messages'], 'readwrite');
+        const store = transaction.objectStore('messages');
         const request = store.add(data);
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
     });
 }
 
-async function getAllContent() {
+async function getAllMessages() {
     return new Promise((resolve, reject) => {
         if (!db) {
             reject(new Error('Database not initialized'));
             return;
         }
-        const transaction = db.transaction(['content'], 'readonly');
-        const store = transaction.objectStore('content');
+        const transaction = db.transaction(['messages'], 'readonly');
+        const store = transaction.objectStore('messages');
         const request = store.getAll();
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
     });
 }
 
-async function getContent(id) {
-    return new Promise((resolve, reject) => {
-        if (!db) {
-            reject(new Error('Database not initialized'));
-            return;
-        }
-        const transaction = db.transaction(['content'], 'readonly');
-        const store = transaction.objectStore('content');
-        const request = store.get(id);
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-    });
-}
+// UI Elements
+const messageInput = document.getElementById('messageInput');
+const sendBtn = document.getElementById('sendBtn');
+const imageBtn = document.getElementById('imageBtn');
+const imageInput = document.getElementById('imageInput');
+const chatMessages = document.getElementById('chatMessages');
+const imagePreviewModal = document.getElementById('imagePreviewModal');
+const previewImage = document.getElementById('previewImage');
+const closePreviewModal = document.getElementById('closePreviewModal');
 
-async function addComment(data) {
-    return new Promise((resolve, reject) => {
-        if (!db) {
-            reject(new Error('Database not initialized'));
-            return;
-        }
-        const transaction = db.transaction(['comments'], 'readwrite');
-        const store = transaction.objectStore('comments');
-        const request = store.add(data);
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-    });
-}
+// Send text message
+async function sendMessage() {
+    const text = messageInput.value.trim();
 
-async function getComments(contentId) {
-    return new Promise((resolve, reject) => {
-        if (!db) {
-            reject(new Error('Database not initialized'));
-            return;
-        }
-        const transaction = db.transaction(['comments'], 'readonly');
-        const store = transaction.objectStore('comments');
-        const index = store.index('contentId');
-        const request = index.getAll(contentId);
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-    });
-}
+    if (!text) return;
 
-async function getLikes(contentId) {
-    return new Promise((resolve, reject) => {
-        if (!db) {
-            reject(new Error('Database not initialized'));
-            return;
-        }
-        const transaction = db.transaction(['likes'], 'readonly');
-        const store = transaction.objectStore('likes');
-        const request = store.get(contentId);
-        request.onsuccess = () => resolve(request.result || { contentId, count: 0, liked: false });
-        request.onerror = () => reject(request.error);
-    });
-}
+    showLoading(true);
 
-async function toggleLike(contentId) {
-    return new Promise(async (resolve, reject) => {
-        if (!db) {
-            reject(new Error('Database not initialized'));
-            return;
-        }
-        const likes = await getLikes(contentId);
-        const newLikes = {
-            contentId,
-            count: likes.liked ? likes.count - 1 : likes.count + 1,
-            liked: !likes.liked
+    try {
+        const messageData = {
+            text,
+            image: null,
+            timestamp: Date.now(),
+            date: new Date().toLocaleString()
         };
 
-        const transaction = db.transaction(['likes'], 'readwrite');
-        const store = transaction.objectStore('likes');
-        const request = store.put(newLikes);
-        request.onsuccess = () => resolve(newLikes);
-        request.onerror = () => reject(request.error);
-    });
+        await addMessage(messageData);
+        messageInput.value = '';
+
+        await loadMessages();
+        scrollToBottom();
+
+        showLoading(false);
+    } catch (error) {
+        console.error('Error sending message:', error);
+        showLoading(false);
+        showToast('Error sending message');
+    }
 }
 
-// UI State
-let currentContentId = null;
+// Send image
+async function sendImage(file) {
+    if (!file) return;
 
-// Tab Navigation
-document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-        const tab = btn.dataset.tab;
-
-        // Update buttons
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-
-        // Update tabs
-        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-        document.getElementById(`${tab}-tab`).classList.add('active');
-
-        // Load content when browsing
-        if (tab === 'browse') {
-            loadContent();
-        }
-    });
-});
-
-// Rich Text Editor Toolbar
-const editor = document.getElementById('editor');
-const fontSize = document.getElementById('fontSize');
-const textColor = document.getElementById('textColor');
-
-document.querySelectorAll('.toolbar-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-        e.preventDefault();
-        const command = btn.dataset.command;
-        document.execCommand(command, false, null);
-        editor.focus();
-    });
-});
-
-fontSize.addEventListener('change', () => {
-    document.execCommand('fontSize', false, fontSize.value);
-    editor.focus();
-});
-
-textColor.addEventListener('change', () => {
-    document.execCommand('foreColor', false, textColor.value);
-    editor.focus();
-});
-
-// Document Form Submit
-document.getElementById('documentForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-
-    const title = document.getElementById('docTitle').value;
-    const content = editor.innerHTML;
-    const category = document.getElementById('docCategory').value;
-
-    // Check if editor has actual text content (not just HTML tags)
-    const textContent = editor.textContent || editor.innerText || '';
-    if (!textContent.trim()) {
-        showToast('Please write some content');
+    // Check file size (max 5MB)
+    const maxSize = 5 * 1024 * 1024;
+    if (file.size > maxSize) {
+        showToast('Image too large! Please choose an image under 5MB');
         return;
     }
 
     showLoading(true);
 
     try {
-        const data = {
-            type: 'document',
-            title,
-            content,
-            category,
-            timestamp: Date.now(),
-            date: new Date().toLocaleDateString()
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            const messageData = {
+                text: '',
+                image: e.target.result,
+                timestamp: Date.now(),
+                date: new Date().toLocaleString()
+            };
+
+            await addMessage(messageData);
+            await loadMessages();
+            scrollToBottom();
+            showLoading(false);
+            showToast('Image sent!');
         };
-
-        await addContent(data);
-
-        showLoading(false);
-        showToast('Document published successfully!');
-
-        // Reset form
-        document.getElementById('documentForm').reset();
-        editor.innerHTML = '';
-
-        // Switch to browse tab
-        document.querySelector('[data-tab="browse"]').click();
+        reader.onerror = () => {
+            showLoading(false);
+            showToast('Error reading image');
+        };
+        reader.readAsDataURL(file);
     } catch (error) {
-        console.error('Error publishing document:', error);
+        console.error('Error sending image:', error);
         showLoading(false);
-        showToast('Error publishing document: ' + error.message);
+        showToast('Error sending image');
     }
-});
+}
 
-
-// Load and display content
-async function loadContent() {
+// Load and display messages
+async function loadMessages() {
     try {
-        let allContent = await getAllContent();
+        const messages = await getAllMessages();
 
         // Sort by timestamp
-        allContent.sort((a, b) => b.timestamp - a.timestamp);
+        messages.sort((a, b) => a.timestamp - b.timestamp);
 
-        const contentGrid = document.getElementById('contentGrid');
-        const noContent = document.getElementById('noContent');
+        chatMessages.innerHTML = '';
 
-        if (allContent.length === 0) {
-            contentGrid.style.display = 'none';
-            noContent.style.display = 'block';
+        if (messages.length === 0) {
+            chatMessages.innerHTML = `
+                <div style="text-align: center; color: var(--text-secondary); padding: 2rem;">
+                    <i class="fas fa-comments" style="font-size: 4rem; margin-bottom: 1rem; opacity: 0.5;"></i>
+                    <p>No messages yet. Start the conversation!</p>
+                </div>
+            `;
             return;
         }
 
-        contentGrid.style.display = 'grid';
-        noContent.style.display = 'none';
-        contentGrid.innerHTML = '';
+        messages.forEach(message => {
+            const messageEl = createMessageElement(message);
+            chatMessages.appendChild(messageEl);
+        });
 
-        for (const item of allContent) {
-            const likes = await getLikes(item.id);
-            const card = createContentCard(item, likes);
-            contentGrid.appendChild(card);
-        }
     } catch (error) {
-        console.error('Error loading content:', error);
-        showToast('Error loading content');
+        console.error('Error loading messages:', error);
+        showToast('Error loading messages');
     }
 }
 
-// Create content card
-function createContentCard(item, likes) {
-    const card = document.createElement('div');
-    card.className = 'content-card';
-    card.onclick = () => openContent(item.id);
+// Create message element
+function createMessageElement(message) {
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'message';
 
-    card.innerHTML = `
-        <div class="content-card-thumb" style="display: flex; align-items: center; justify-content: center; font-size: 3rem;">
-            <i class="fas fa-file-alt"></i>
-        </div>
-        <div class="content-card-body">
-            <h3 class="content-card-title">${escapeHtml(item.title)}</h3>
-            <div class="content-card-info">
-                <i class="fas fa-user-circle"></i>
-                <span>Anonymous</span>
-                <i class="fas fa-check-circle verified" title="Verified"></i>
-            </div>
-            <div class="content-card-meta">
-                <span><i class="fas fa-heart"></i> ${likes.count}</span>
-                <span>${item.date}</span>
-            </div>
+    const headerHtml = `
+        <div class="message-header">
+            <i class="fas fa-user-circle"></i>
+            <span>Anonymous</span>
+            <i class="fas fa-check-circle verified" title="Verified"></i>
+            <span class="message-time">${message.date}</span>
         </div>
     `;
 
-    return card;
+    let bubbleContent = '';
+    if (message.text) {
+        bubbleContent += `<div>${escapeHtml(message.text)}</div>`;
+    }
+    if (message.image) {
+        bubbleContent += `<img src="${message.image}" alt="Shared image" onclick="previewImageFull('${message.image}')">`;
+    }
+
+    messageDiv.innerHTML = `
+        ${headerHtml}
+        <div class="message-bubble">
+            ${bubbleContent}
+        </div>
+    `;
+
+    return messageDiv;
 }
 
-// Open content in modal
-async function openContent(contentId) {
-    currentContentId = contentId;
-
-    try {
-        const item = await getContent(contentId);
-        const likes = await getLikes(contentId);
-        const comments = await getComments(contentId);
-
-        // Show document viewer
-        const docEl = document.getElementById('documentViewer');
-        docEl.innerHTML = item.content;
-        docEl.style.display = 'block';
-
-        // Set details
-        document.getElementById('detailTitle').textContent = item.title;
-        document.getElementById('detailDate').textContent = item.date;
-
-        const descSection = document.getElementById('detailDescription');
-        if (item.description) {
-            descSection.textContent = item.description;
-            descSection.style.display = 'block';
-        } else {
-            descSection.style.display = 'none';
-        }
-
-        // Set likes
-        const likeBtn = document.getElementById('likeBtn');
-        const likeCount = document.getElementById('likeCount');
-        likeCount.textContent = likes.count;
-
-        if (likes.liked) {
-            likeBtn.classList.add('liked');
-            likeBtn.querySelector('i').className = 'fas fa-heart';
-        } else {
-            likeBtn.classList.remove('liked');
-            likeBtn.querySelector('i').className = 'far fa-heart';
-        }
-
-        // Display comments
-        displayComments(comments);
-
-        // Show modal
-        document.getElementById('detailModal').classList.add('active');
-    } catch (error) {
-        console.error('Error opening content:', error);
-        showToast('Error loading content');
-    }
+// Preview image in modal
+function previewImageFull(imageSrc) {
+    previewImage.src = imageSrc;
+    imagePreviewModal.classList.add('active');
 }
 
-// Display comments
-function displayComments(comments) {
-    const commentsList = document.getElementById('commentsList');
-    const commentCount = document.getElementById('commentCount');
+// Close preview modal
+closePreviewModal.addEventListener('click', () => {
+    imagePreviewModal.classList.remove('active');
+});
 
-    commentCount.textContent = comments.length;
-    commentsList.innerHTML = '';
+document.querySelector('#imagePreviewModal .modal-overlay').addEventListener('click', () => {
+    imagePreviewModal.classList.remove('active');
+});
 
-    if (comments.length === 0) {
-        commentsList.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 2rem;">No comments yet. Be the first!</p>';
-        return;
-    }
-
-    comments.sort((a, b) => b.timestamp - a.timestamp);
-
-    comments.forEach(comment => {
-        const commentEl = document.createElement('div');
-        commentEl.className = 'comment';
-        commentEl.innerHTML = `
-            <div class="comment-header">
-                <i class="fas fa-user-circle"></i>
-                <span>Anonymous User</span>
-                <i class="fas fa-check-circle verified" title="Verified"></i>
-                <span class="comment-date">${comment.date}</span>
-            </div>
-            <div class="comment-text">${escapeHtml(comment.text)}</div>
-        `;
-        commentsList.appendChild(commentEl);
-    });
+// Scroll to bottom of chat
+function scrollToBottom() {
+    chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
-// Modal controls
-document.getElementById('closeModal').addEventListener('click', () => {
-    document.getElementById('detailModal').classList.remove('active');
-});
+// Event listeners
+sendBtn.addEventListener('click', sendMessage);
 
-document.querySelector('.modal-overlay').addEventListener('click', () => {
-    document.getElementById('detailModal').classList.remove('active');
-});
-
-// Like button
-document.getElementById('likeBtn').addEventListener('click', async () => {
-    if (!currentContentId) return;
-
-    try {
-        const likes = await toggleLike(currentContentId);
-        const likeBtn = document.getElementById('likeBtn');
-        const likeCount = document.getElementById('likeCount');
-
-        likeCount.textContent = likes.count;
-
-        if (likes.liked) {
-            likeBtn.classList.add('liked');
-            likeBtn.querySelector('i').className = 'fas fa-heart';
-            showToast('Added to favorites!');
-        } else {
-            likeBtn.classList.remove('liked');
-            likeBtn.querySelector('i').className = 'far fa-heart';
-            showToast('Removed from favorites');
-        }
-
-        loadContent();
-    } catch (error) {
-        console.error('Error toggling like:', error);
-        showToast('Error updating like');
-    }
-});
-
-// Download button
-document.getElementById('downloadBtn').addEventListener('click', async () => {
-    if (!currentContentId) return;
-
-    try {
-        const item = await getContent(currentContentId);
-
-        // Download document as HTML
-        const blob = new Blob([item.content], { type: 'text/html' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${item.title}.html`;
-        a.click();
-        URL.revokeObjectURL(url);
-
-        showToast('Download started!');
-    } catch (error) {
-        console.error('Error downloading:', error);
-        showToast('Error downloading file');
-    }
-});
-
-// Share button
-document.getElementById('shareBtn').addEventListener('click', () => {
-    if (navigator.share) {
-        navigator.share({
-            title: document.getElementById('detailTitle').textContent,
-            url: window.location.href
-        }).catch(() => {});
-    } else {
-        navigator.clipboard.writeText(window.location.href);
-        showToast('Link copied to clipboard!');
-    }
-});
-
-// Comment functionality
-document.getElementById('commentBtn').addEventListener('click', async () => {
-    const commentInput = document.getElementById('commentInput');
-    const text = commentInput.value.trim();
-
-    if (!text || !currentContentId) return;
-
-    try {
-        const commentData = {
-            contentId: currentContentId,
-            text,
-            timestamp: Date.now(),
-            date: new Date().toLocaleString()
-        };
-
-        await addComment(commentData);
-        commentInput.value = '';
-
-        const comments = await getComments(currentContentId);
-        displayComments(comments);
-
-        showToast('Comment added!');
-    } catch (error) {
-        console.error('Error adding comment:', error);
-        showToast('Error adding comment');
-    }
-});
-
-document.getElementById('commentInput').addEventListener('keypress', (e) => {
+messageInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
-        document.getElementById('commentBtn').click();
+        sendMessage();
     }
+});
+
+imageBtn.addEventListener('click', () => {
+    imageInput.click();
+});
+
+imageInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+        sendImage(file);
+    }
+    imageInput.value = ''; // Reset input
 });
 
 // Utility functions
@@ -506,13 +263,16 @@ function escapeHtml(text) {
 // Initialize
 async function init() {
     try {
-        console.log('Initializing FreeView...');
+        console.log('Initializing FreeView Chat...');
         await initDB();
-        console.log('FreeView initialized successfully! Database ready.');
+        console.log('Database initialized successfully!');
+        await loadMessages();
+        scrollToBottom();
+        console.log('Chat loaded!');
     } catch (error) {
         console.error('Error initializing app:', error);
-        showToast('Error initializing database: ' + error.message);
-        alert('Database initialization failed. Please refresh the page. Error: ' + error.message);
+        showToast('Error initializing chat: ' + error.message);
+        alert('Chat initialization failed. Please refresh the page. Error: ' + error.message);
     }
 }
 
