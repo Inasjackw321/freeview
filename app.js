@@ -144,8 +144,6 @@ async function toggleLike(contentId) {
 
 // UI State
 let currentContentId = null;
-let currentFilter = 'all';
-let currentFile = null;
 
 // Tab Navigation
 document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -164,21 +162,6 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
         if (tab === 'browse') {
             loadContent();
         }
-    });
-});
-
-// Create Options
-document.querySelectorAll('.option-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-        const option = btn.dataset.option;
-
-        // Update buttons
-        document.querySelectorAll('.option-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-
-        // Update sections
-        document.querySelectorAll('.creator-section').forEach(s => s.classList.remove('active'));
-        document.getElementById(`${option}-creator`).classList.add('active');
     });
 });
 
@@ -251,191 +234,11 @@ document.getElementById('documentForm').addEventListener('submit', async (e) => 
     }
 });
 
-// File Upload - Drag and Drop
-const uploadArea = document.getElementById('uploadArea');
-const fileInput = document.getElementById('fileInput');
-const uploadPreview = document.getElementById('uploadPreview');
-const fileName = document.getElementById('fileName');
-const fileSize = document.getElementById('fileSize');
-
-uploadArea.addEventListener('click', () => {
-    fileInput.click();
-});
-
-uploadArea.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    uploadArea.style.borderColor = 'var(--accent)';
-});
-
-uploadArea.addEventListener('dragleave', () => {
-    uploadArea.style.borderColor = '';
-});
-
-uploadArea.addEventListener('drop', (e) => {
-    e.preventDefault();
-    uploadArea.style.borderColor = '';
-
-    const files = e.dataTransfer.files;
-    if (files.length > 0) {
-        handleFileSelect(files[0]);
-    }
-});
-
-fileInput.addEventListener('change', (e) => {
-    if (e.target.files.length > 0) {
-        handleFileSelect(e.target.files[0]);
-    }
-});
-
-function handleFileSelect(file) {
-    currentFile = file;
-
-    fileName.textContent = file.name;
-    fileSize.textContent = `${(file.size / (1024 * 1024)).toFixed(2)} MB`;
-
-    uploadArea.style.display = 'none';
-    uploadPreview.style.display = 'block';
-}
-
-document.getElementById('removeFile').addEventListener('click', () => {
-    currentFile = null;
-    fileInput.value = '';
-    uploadArea.style.display = 'block';
-    uploadPreview.style.display = 'none';
-});
-
-// Upload Form Submit
-document.getElementById('uploadForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-
-    if (!currentFile) {
-        showToast('Please select a file');
-        return;
-    }
-
-    // Check file size (recommend under 50MB for IndexedDB)
-    const maxSize = 50 * 1024 * 1024; // 50MB
-    if (currentFile.size > maxSize) {
-        showToast('File too large! Please choose a file under 50MB');
-        return;
-    }
-
-    const title = document.getElementById('uploadTitle').value;
-    const description = document.getElementById('uploadDescription').value;
-    const category = document.getElementById('uploadCategory').value;
-
-    showLoading(true);
-
-    try {
-        const fileData = await fileToBase64(currentFile);
-        const fileType = getFileType(currentFile);
-
-        let thumbnail = null;
-        if (fileType === 'video') {
-            thumbnail = await generateVideoThumbnail(currentFile);
-        } else if (fileType === 'image') {
-            thumbnail = fileData;
-        }
-
-        const data = {
-            type: fileType,
-            title,
-            description,
-            category,
-            fileData,
-            fileName: currentFile.name,
-            thumbnail,
-            timestamp: Date.now(),
-            date: new Date().toLocaleDateString()
-        };
-
-        await addContent(data);
-
-        showLoading(false);
-        showToast('File uploaded successfully!');
-
-        // Reset form
-        document.getElementById('uploadForm').reset();
-        currentFile = null;
-        uploadArea.style.display = 'block';
-        uploadPreview.style.display = 'none';
-
-        // Switch to browse tab
-        document.querySelector('[data-tab="browse"]').click();
-    } catch (error) {
-        console.error('Error uploading file:', error);
-        showLoading(false);
-        showToast('Upload failed: ' + (error.message || 'Unknown error'));
-    }
-});
-
-// Helper functions
-function getFileType(file) {
-    if (file.type.startsWith('video/')) return 'video';
-    if (file.type.startsWith('image/')) return 'image';
-    if (file.type === 'application/pdf') return 'pdf';
-    return 'document';
-}
-
-function fileToBase64(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = error => reject(error);
-    });
-}
-
-function generateVideoThumbnail(file) {
-    return new Promise((resolve) => {
-        const video = document.createElement('video');
-        const canvas = document.createElement('canvas');
-
-        video.preload = 'metadata';
-        video.src = URL.createObjectURL(file);
-
-        video.onloadedmetadata = () => {
-            video.currentTime = 1;
-        };
-
-        video.onseeked = () => {
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-            const thumbnail = canvas.toDataURL('image/jpeg', 0.7);
-            URL.revokeObjectURL(video.src);
-            resolve(thumbnail);
-        };
-
-        video.onerror = () => {
-            URL.revokeObjectURL(video.src);
-            resolve(null);
-        };
-    });
-}
-
-// Browse - Filter buttons
-document.querySelectorAll('.filter-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-
-        currentFilter = btn.dataset.filter;
-        loadContent();
-    });
-});
 
 // Load and display content
 async function loadContent() {
     try {
         let allContent = await getAllContent();
-
-        // Filter
-        if (currentFilter !== 'all') {
-            allContent = allContent.filter(item => item.type === currentFilter);
-        }
 
         // Sort by timestamp
         allContent.sort((a, b) => b.timestamp - a.timestamp);
@@ -470,17 +273,10 @@ function createContentCard(item, likes) {
     card.className = 'content-card';
     card.onclick = () => openContent(item.id);
 
-    let thumbHtml = '';
-    if (item.type === 'document') {
-        thumbHtml = `<div class="content-card-thumb" style="display: flex; align-items: center; justify-content: center; font-size: 3rem;"><i class="fas fa-file-alt"></i></div>`;
-    } else if (item.thumbnail) {
-        thumbHtml = `<img src="${item.thumbnail}" class="content-card-thumb" alt="${item.title}">`;
-    } else {
-        thumbHtml = `<div class="content-card-thumb" style="display: flex; align-items: center; justify-content: center; font-size: 3rem;"><i class="fas fa-file"></i></div>`;
-    }
-
     card.innerHTML = `
-        ${thumbHtml}
+        <div class="content-card-thumb" style="display: flex; align-items: center; justify-content: center; font-size: 3rem;">
+            <i class="fas fa-file-alt"></i>
+        </div>
         <div class="content-card-body">
             <h3 class="content-card-title">${escapeHtml(item.title)}</h3>
             <div class="content-card-info">
@@ -507,30 +303,10 @@ async function openContent(contentId) {
         const likes = await getLikes(contentId);
         const comments = await getComments(contentId);
 
-        // Hide all viewers
-        document.getElementById('videoViewer').style.display = 'none';
-        document.getElementById('imageViewer').style.display = 'none';
-        document.getElementById('documentViewer').style.display = 'none';
-        document.getElementById('pdfViewer').style.display = 'none';
-
-        // Show appropriate viewer
-        if (item.type === 'video') {
-            const videoEl = document.getElementById('videoViewer');
-            videoEl.src = item.fileData;
-            videoEl.style.display = 'block';
-        } else if (item.type === 'image') {
-            const imgEl = document.getElementById('imageViewer');
-            imgEl.src = item.fileData;
-            imgEl.style.display = 'block';
-        } else if (item.type === 'pdf') {
-            const pdfEl = document.getElementById('pdfViewer');
-            pdfEl.src = item.fileData;
-            pdfEl.style.display = 'block';
-        } else if (item.type === 'document') {
-            const docEl = document.getElementById('documentViewer');
-            docEl.innerHTML = item.content;
-            docEl.style.display = 'block';
-        }
+        // Show document viewer
+        const docEl = document.getElementById('documentViewer');
+        docEl.innerHTML = item.content;
+        docEl.style.display = 'block';
 
         // Set details
         document.getElementById('detailTitle').textContent = item.title;
@@ -643,22 +419,14 @@ document.getElementById('downloadBtn').addEventListener('click', async () => {
     try {
         const item = await getContent(currentContentId);
 
-        if (item.type === 'document') {
-            // Download document as HTML
-            const blob = new Blob([item.content], { type: 'text/html' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${item.title}.html`;
-            a.click();
-            URL.revokeObjectURL(url);
-        } else {
-            // Download file
-            const a = document.createElement('a');
-            a.href = item.fileData;
-            a.download = item.fileName || `${item.title}.${item.type}`;
-            a.click();
-        }
+        // Download document as HTML
+        const blob = new Blob([item.content], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${item.title}.html`;
+        a.click();
+        URL.revokeObjectURL(url);
 
         showToast('Download started!');
     } catch (error) {

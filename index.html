@@ -38,21 +38,14 @@
     <!-- Create Tab -->
     <div class="tab-content active" id="create-tab">
         <div class="container">
-            <div class="create-options">
-                <button class="option-btn active" data-option="document">
-                    <i class="fas fa-file-word"></i>
-                    <span>Create Document</span>
-                </button>
-                <button class="option-btn" data-option="upload">
-                    <i class="fas fa-upload"></i>
-                    <span>Upload File</span>
-                </button>
+            <div class="create-header">
+                <h2>Create New Document</h2>
+                <p>Write and share documents with rich text formatting</p>
             </div>
 
             <!-- Document Creator -->
             <div class="creator-section active" id="document-creator">
                 <div class="card glass">
-                    <h2>Create New Document</h2>
                     <form id="documentForm">
                         <div class="form-group">
                             <input type="text" id="docTitle" placeholder="Document Title" required>
@@ -116,57 +109,6 @@
                     </form>
                 </div>
             </div>
-
-            <!-- File Uploader -->
-            <div class="creator-section" id="upload-creator">
-                <div class="card glass">
-                    <h2>Upload File</h2>
-                    <form id="uploadForm">
-                        <div class="upload-area" id="uploadArea">
-                            <i class="fas fa-cloud-upload-alt"></i>
-                            <h3>Drag & Drop or Click to Upload</h3>
-                            <p>Videos, Images, Documents, PDFs</p>
-                            <input type="file" id="fileInput" hidden>
-                        </div>
-
-                        <div class="upload-preview" id="uploadPreview" style="display: none;">
-                            <div class="preview-info">
-                                <i class="fas fa-file"></i>
-                                <div class="preview-text">
-                                    <p id="fileName"></p>
-                                    <small id="fileSize"></small>
-                                </div>
-                                <button type="button" class="remove-btn" id="removeFile">
-                                    <i class="fas fa-times"></i>
-                                </button>
-                            </div>
-                        </div>
-
-                        <div class="form-group">
-                            <input type="text" id="uploadTitle" placeholder="Title" required>
-                        </div>
-
-                        <div class="form-group">
-                            <textarea id="uploadDescription" placeholder="Description (optional)" rows="3"></textarea>
-                        </div>
-
-                        <div class="form-group">
-                            <select id="uploadCategory">
-                                <option value="general">General</option>
-                                <option value="education">Education</option>
-                                <option value="entertainment">Entertainment</option>
-                                <option value="technology">Technology</option>
-                                <option value="business">Business</option>
-                            </select>
-                        </div>
-
-                        <button type="submit" class="submit-btn">
-                            <i class="fas fa-upload"></i>
-                            Upload File
-                        </button>
-                    </form>
-                </div>
-            </div>
         </div>
     </div>
 
@@ -174,13 +116,7 @@
     <div class="tab-content" id="browse-tab">
         <div class="container">
             <div class="browse-header">
-                <h2>All Content</h2>
-                <div class="filter-buttons">
-                    <button class="filter-btn active" data-filter="all">All</button>
-                    <button class="filter-btn" data-filter="document">Documents</button>
-                    <button class="filter-btn" data-filter="video">Videos</button>
-                    <button class="filter-btn" data-filter="image">Images</button>
-                </div>
+                <h2>All Documents</h2>
             </div>
 
             <div class="content-grid" id="contentGrid">
@@ -189,7 +125,7 @@
 
             <div class="no-content" id="noContent">
                 <i class="fas fa-inbox"></i>
-                <p>No content yet. Create or upload something!</p>
+                <p>No documents yet. Create one!</p>
             </div>
         </div>
     </div>
@@ -205,10 +141,7 @@
             <div class="detail-view">
                 <!-- Content Viewer -->
                 <div class="viewer-container">
-                    <video id="videoViewer" controls style="display: none;"></video>
-                    <img id="imageViewer" style="display: none;">
-                    <div id="documentViewer" class="document-viewer" style="display: none;"></div>
-                    <iframe id="pdfViewer" style="display: none;"></iframe>
+                    <div id="documentViewer" class="document-viewer"></div>
                 </div>
 
                 <!-- Content Info -->
