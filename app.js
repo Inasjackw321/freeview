@@ -86,6 +86,7 @@ let isUserScrolling = false;
 let messageReactions = JSON.parse(localStorage.getItem('messageReactions') || '{}'); // Store reactions per message ID
 let lastGameTime = 0;
 let activeMultiplayerGames = JSON.parse(localStorage.getItem('activeMultiplayerGames') || '{}'); // Track multiplayer games
+let gameTimers = {}; // Track active game timers
 
 // Automod functions
 function checkAutomod(text) {
@@ -247,6 +248,52 @@ const MULTIPLAYER_GAMES = {
     }
 };
 
+// Start countdown timer for a game
+function startGameTimer(gameId, duration) {
+    const startTime = Date.now();
+    const endTime = startTime + duration;
+
+    gameTimers[gameId] = {
+        startTime,
+        endTime,
+        duration,
+        interval: setInterval(() => updateGameTimer(gameId), 1000)
+    };
+
+    updateGameTimer(gameId);
+}
+
+// Update countdown timer display
+function updateGameTimer(gameId) {
+    const timer = gameTimers[gameId];
+    if (!timer) return;
+
+    const now = Date.now();
+    const remaining = Math.max(0, Math.ceil((timer.endTime - now) / 1000));
+
+    // Find timer element in DOM
+    const timerEl = document.querySelector(`[data-game-timer="${gameId}"]`);
+    if (timerEl) {
+        if (remaining > 0) {
+            timerEl.textContent = `⏱️ Starting in ${remaining}s`;
+            timerEl.style.color = 'var(--accent)';
+            timerEl.style.fontWeight = '600';
+        } else {
+            timerEl.textContent = '🎮 Starting now...';
+            clearInterval(timer.interval);
+            delete gameTimers[gameId];
+        }
+    }
+}
+
+// Stop game timer
+function stopGameTimer(gameId) {
+    if (gameTimers[gameId]) {
+        clearInterval(gameTimers[gameId].interval);
+        delete gameTimers[gameId];
+    }
+}
+
 // Create a multiplayer game
 async function createMultiplayerGame(gameType) {
     if (!MULTIPLAYER_GAMES[gameType]) {
@@ -271,18 +318,22 @@ async function createMultiplayerGame(gameType) {
     localStorage.setItem('activeMultiplayerGames', JSON.stringify(activeMultiplayerGames));
 
     const gameMessage = {
-        text: `${game.emoji} **${game.name}** started!\n${game.description}\n\nType "!join" to play! (${activeMultiplayerGames[gameId].players.length}/${game.maxPlayers} players)`,
+        text: `${game.emoji} **${game.name}** started!\n${game.description}\n\nType "!join" to play! (${activeMultiplayerGames[gameId].players.length}/${game.maxPlayers} players)\n\n`,
         image: null,
         userId: 'game_system',
         timestamp: Date.now(),
         date: new Date().toLocaleString(),
         isMultiplayerGame: true,
-        gameId: gameId
+        gameId: gameId,
+        hasTimer: true
     };
 
     await addMessage(gameMessage);
     await loadMessages(true);
     scrollToBottom();
+
+    // Start 10 second countdown timer
+    startGameTimer(gameId, 10000);
 
     // Auto-start after 10 seconds if min players met
     setTimeout(() => checkAndStartGame(gameId), 10000);
@@ -322,21 +373,24 @@ async function joinMultiplayerGame(gameId) {
 
     // Update the game message
     const gameMessage = {
-        text: `${gameInfo.emoji} **${gameInfo.name}**\n${game.players.length}/${gameInfo.maxPlayers} players joined!\n\nType "!join" to play or wait for game to start...`,
+        text: `${gameInfo.emoji} **${gameInfo.name}**\n${game.players.length}/${gameInfo.maxPlayers} players joined!\n\nType "!join" to play!\n\n`,
         image: null,
         userId: 'game_system',
         timestamp: Date.now(),
         date: new Date().toLocaleString(),
         isMultiplayerGame: true,
-        gameId: gameId
+        gameId: gameId,
+        hasTimer: true
     };
 
     await addMessage(gameMessage);
     await loadMessages(true);
     scrollToBottom();
 
-    // Check if we can start
+    // Restart timer with 5 seconds if we have enough players
     if (game.players.length >= gameInfo.minPlayers) {
+        stopGameTimer(gameId);
+        startGameTimer(gameId, 5000);
         setTimeout(() => checkAndStartGame(gameId), 5000);
     }
 
@@ -351,10 +405,14 @@ async function checkAndStartGame(gameId) {
     const gameInfo = MULTIPLAYER_GAMES[game.type];
     if (game.players.length < gameInfo.minPlayers) {
         showToast('⚠️ Not enough players. Game cancelled.');
+        stopGameTimer(gameId);
         delete activeMultiplayerGames[gameId];
         localStorage.setItem('activeMultiplayerGames', JSON.stringify(activeMultiplayerGames));
         return;
     }
+
+    // Stop the countdown timer
+    stopGameTimer(gameId);
 
     game.status = 'active';
     localStorage.setItem('activeMultiplayerGames', JSON.stringify(activeMultiplayerGames));
@@ -834,6 +892,15 @@ function createMessageElement(message) {
     `;
 
     const messageContent = messageDiv.querySelector('.message-content');
+
+    // Add timer for game messages
+    if (message.hasTimer && message.gameId) {
+        const timerDiv = document.createElement('div');
+        timerDiv.className = 'game-timer';
+        timerDiv.setAttribute('data-game-timer', message.gameId);
+        timerDiv.textContent = '⏱️ Starting soon...';
+        messageContent.appendChild(timerDiv);
+    }
 
     // Add blurred image with reveal button if exists
     if (message.image) {

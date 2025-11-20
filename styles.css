@@ -1228,6 +1228,19 @@ body {
     color: var(--text-secondary);
 }
 
+/* Game Timer */
+.game-timer {
+    margin-top: 0.5rem;
+    padding: 0.6rem 1rem;
+    background: rgba(102, 126, 234, 0.2);
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    text-align: center;
+    font-size: 0.9rem;
+    font-weight: 600;
+    animation: pulse 2s infinite;
+}
+
 /* Games */
 .games-grid {
     display: grid;
