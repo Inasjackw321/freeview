@@ -38,6 +38,10 @@ function initDB() {
 // Database operations
 async function addContent(data) {
     return new Promise((resolve, reject) => {
+        if (!db) {
+            reject(new Error('Database not initialized'));
+            return;
+        }
         const transaction = db.transaction(['content'], 'readwrite');
         const store = transaction.objectStore('content');
         const request = store.add(data);
@@ -48,6 +52,10 @@ async function addContent(data) {
 
 async function getAllContent() {
     return new Promise((resolve, reject) => {
+        if (!db) {
+            reject(new Error('Database not initialized'));
+            return;
+        }
         const transaction = db.transaction(['content'], 'readonly');
         const store = transaction.objectStore('content');
         const request = store.getAll();
@@ -58,6 +66,10 @@ async function getAllContent() {
 
 async function getContent(id) {
     return new Promise((resolve, reject) => {
+        if (!db) {
+            reject(new Error('Database not initialized'));
+            return;
+        }
         const transaction = db.transaction(['content'], 'readonly');
         const store = transaction.objectStore('content');
         const request = store.get(id);
@@ -68,6 +80,10 @@ async function getContent(id) {
 
 async function addComment(data) {
     return new Promise((resolve, reject) => {
+        if (!db) {
+            reject(new Error('Database not initialized'));
+            return;
+        }
         const transaction = db.transaction(['comments'], 'readwrite');
         const store = transaction.objectStore('comments');
         const request = store.add(data);
@@ -78,6 +94,10 @@ async function addComment(data) {
 
 async function getComments(contentId) {
     return new Promise((resolve, reject) => {
+        if (!db) {
+            reject(new Error('Database not initialized'));
+            return;
+        }
         const transaction = db.transaction(['comments'], 'readonly');
         const store = transaction.objectStore('comments');
         const index = store.index('contentId');
@@ -89,6 +109,10 @@ async function getComments(contentId) {
 
 async function getLikes(contentId) {
     return new Promise((resolve, reject) => {
+        if (!db) {
+            reject(new Error('Database not initialized'));
+            return;
+        }
         const transaction = db.transaction(['likes'], 'readonly');
         const store = transaction.objectStore('likes');
         const request = store.get(contentId);
@@ -99,6 +123,10 @@ async function getLikes(contentId) {
 
 async function toggleLike(contentId) {
     return new Promise(async (resolve, reject) => {
+        if (!db) {
+            reject(new Error('Database not initialized'));
+            return;
+        }
         const likes = await getLikes(contentId);
         const newLikes = {
             contentId,
@@ -710,11 +738,13 @@ function escapeHtml(text) {
 // Initialize
 async function init() {
     try {
+        console.log('Initializing FreeView...');
         await initDB();
-        console.log('FreeView initialized successfully!');
+        console.log('FreeView initialized successfully! Database ready.');
     } catch (error) {
         console.error('Error initializing app:', error);
-        showToast('Error initializing application');
+        showToast('Error initializing database: ' + error.message);
+        alert('Database initialization failed. Please refresh the page. Error: ' + error.message);
     }
 }
 
