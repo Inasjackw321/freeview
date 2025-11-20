@@ -83,7 +83,8 @@ const messageCountEl = document.getElementById('messageCount');
 // State
 let typingTimeout;
 let isUserScrolling = false;
-let messageReactions = {}; // Store reactions per message ID
+let messageReactions = JSON.parse(localStorage.getItem('messageReactions') || '{}'); // Store reactions per message ID
+let lastGameTime = 0;
 
 // Automod functions
 function checkAutomod(text) {
@@ -112,6 +113,107 @@ function isUserBanned(userId) {
     return bannedUsers.includes(userId);
 }
 
+// Random game bot
+async function maybePostGame() {
+    const now = Date.now();
+    // Post a game every 30 seconds minimum
+    if (now - lastGameTime < 30000) return;
+
+    // 20% chance to post a game
+    if (Math.random() > 0.2) return;
+
+    lastGameTime = now;
+
+    const games = [
+        { text: '🎲 Roll the Dice! Reply with "roll" to play!', type: 'dice' },
+        { text: '🪙 Coin Flip! Reply with "flip" to play!', type: 'coinflip' },
+        { text: '✊ Rock Paper Scissors! Reply with rock, paper, or scissors!', type: 'rps' },
+        { text: '🎯 Guess my number (1-10)! Reply with a number!', type: 'guess' }
+    ];
+
+    const game = games[Math.floor(Math.random() * games.length)];
+
+    const gameMessage = {
+        text: game.text,
+        image: null,
+        userId: 'game_bot',
+        timestamp: Date.now(),
+        date: new Date().toLocaleString(),
+        isGame: true,
+        gameType: game.type
+    };
+
+    await addMessage(gameMessage);
+    await loadMessages(true);
+    scrollToBottom();
+}
+
+// Handle game responses
+function handleGameResponse(text, gameType) {
+    const lowerText = text.toLowerCase();
+
+    if (gameType === 'dice' && lowerText.includes('roll')) {
+        const roll = Math.floor(Math.random() * 6) + 1;
+        showToast(`🎲 You rolled a ${roll}!`);
+        return true;
+    }
+
+    if (gameType === 'coinflip' && lowerText.includes('flip')) {
+        const result = Math.random() > 0.5 ? 'Heads' : 'Tails';
+        showToast(`🪙 ${result}!`);
+        return true;
+    }
+
+    if (gameType === 'rps' && (lowerText.includes('rock') || lowerText.includes('paper') || lowerText.includes('scissors'))) {
+        const choices = ['Rock', 'Paper', 'Scissors'];
+        const botChoice = choices[Math.floor(Math.random() * 3)];
+        let userChoice = 'Rock';
+        if (lowerText.includes('paper')) userChoice = 'Paper';
+        if (lowerText.includes('scissors')) userChoice = 'Scissors';
+
+        let result;
+        if (userChoice === botChoice) {
+            result = `🤝 Tie! Both chose ${userChoice}`;
+        } else if (
+            (userChoice === 'Rock' && botChoice === 'Scissors') ||
+            (userChoice === 'Paper' && botChoice === 'Rock') ||
+            (userChoice === 'Scissors' && botChoice === 'Paper')
+        ) {
+            result = `🎉 You Win! ${userChoice} beats ${botChoice}`;
+        } else {
+            result = `😢 You Lose! ${botChoice} beats ${userChoice}`;
+        }
+        showToast(result);
+        return true;
+    }
+
+    if (gameType === 'guess') {
+        const num = parseInt(lowerText);
+        if (num >= 1 && num <= 10) {
+            const answer = Math.floor(Math.random() * 10) + 1;
+            if (num === answer) {
+                showToast(`🎉 Correct! The number was ${answer}!`);
+            } else {
+                showToast(`❌ Wrong! You guessed ${num}, it was ${answer}`);
+            }
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// Check for game responses in recent messages
+async function checkForGameResponse(text) {
+    const messages = await getAllMessages();
+    const recentGames = messages.filter(m => m.isGame && Date.now() - m.timestamp < 60000).reverse();
+
+    if (recentGames.length > 0) {
+        return handleGameResponse(text, recentGames[0].gameType);
+    }
+    return false;
+}
+
 // Send text message
 async function sendMessage() {
     const text = messageInput.value.trim();
@@ -125,17 +227,22 @@ async function sendMessage() {
         return;
     }
 
-    // Check automod
-    const bannedWord = checkAutomod(text);
-    if (bannedWord) {
-        banUser(USER_ID);
-        showToast(`⚠️ Automod: Banned for using "${bannedWord}". Strike ${userBanCount[USER_ID] || 1}/3`);
-        messageInput.value = '';
+    // Check for game response
+    const isGameResponse = await checkForGameResponse(text);
 
-        if (userBanCount[USER_ID] >= 3) {
-            showToast('❌ You have been permanently banned');
+    // Check automod (skip for game responses)
+    if (!isGameResponse) {
+        const bannedWord = checkAutomod(text);
+        if (bannedWord) {
+            banUser(USER_ID);
+            showToast(`⚠️ Automod: Banned for using "${bannedWord}". Strike ${userBanCount[USER_ID] || 1}/3`);
+            messageInput.value = '';
+
+            if (userBanCount[USER_ID] >= 3) {
+                showToast('❌ You have been permanently banned');
+            }
+            return;
         }
-        return;
     }
 
     showLoading(true);
@@ -154,6 +261,9 @@ async function sendMessage() {
 
         await loadMessages(true); // Play sound
         scrollToBottom();
+
+        // Maybe post a game after user message
+        await maybePostGame();
 
         showLoading(false);
     } catch (error) {
@@ -322,7 +432,23 @@ function createMessageElement(message) {
     emojis.forEach(emoji => {
         const reactionBtn = document.createElement('span');
         reactionBtn.className = 'reaction';
-        reactionBtn.innerHTML = `${emoji} <span class="reaction-count">0</span>`;
+
+        // Load saved reactions
+        const savedReaction = messageReactions[message.id]?.[emoji];
+        const count = savedReaction?.count || 0;
+        const userReacted = savedReaction?.users?.includes(USER_ID) || false;
+
+        if (userReacted) {
+            reactionBtn.classList.add('active');
+        }
+
+        const countEl = document.createElement('span');
+        countEl.className = 'reaction-count';
+        countEl.textContent = count;
+        countEl.style.display = count > 0 ? 'inline' : 'none';
+
+        reactionBtn.appendChild(document.createTextNode(emoji + ' '));
+        reactionBtn.appendChild(countEl);
         reactionBtn.onclick = () => addReaction(message.id, emoji, reactionBtn);
         reactionsDiv.appendChild(reactionBtn);
     });
@@ -346,20 +472,24 @@ function addReaction(messageId, emoji, btn) {
         messageReactions[messageId] = {};
     }
     if (!messageReactions[messageId][emoji]) {
-        messageReactions[messageId][emoji] = 0;
+        messageReactions[messageId][emoji] = { count: 0, users: [] };
     }
 
     // Toggle reaction
-    if (btn.classList.contains('active')) {
+    const userReacted = messageReactions[messageId][emoji].users.includes(USER_ID);
+
+    if (userReacted) {
         btn.classList.remove('active');
-        messageReactions[messageId][emoji]--;
+        messageReactions[messageId][emoji].count--;
+        messageReactions[messageId][emoji].users = messageReactions[messageId][emoji].users.filter(id => id !== USER_ID);
     } else {
         btn.classList.add('active');
-        messageReactions[messageId][emoji]++;
+        messageReactions[messageId][emoji].count++;
+        messageReactions[messageId][emoji].users.push(USER_ID);
         playSoundEffect('reaction');
     }
 
-    const count = messageReactions[messageId][emoji];
+    const count = messageReactions[messageId][emoji].count;
     const countEl = btn.querySelector('.reaction-count');
     countEl.textContent = count;
 
@@ -368,6 +498,9 @@ function addReaction(messageId, emoji, btn) {
     } else {
         countEl.style.display = 'none';
     }
+
+    // Save to localStorage
+    localStorage.setItem('messageReactions', JSON.stringify(messageReactions));
 }
 
 // Format timestamp
