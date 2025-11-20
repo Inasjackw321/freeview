@@ -64,7 +64,10 @@
             <i class="fas fa-gamepad"></i>
         </button>
         <input type="file" id="imageInput" accept="image/*" style="display: none;">
-        <input type="text" id="messageInput" placeholder="Type a message..." autocomplete="off">
+        <div style="position: relative; flex: 1;">
+            <input type="text" id="messageInput" placeholder="Type a message..." autocomplete="off">
+            <div class="autosuggest" id="autosuggest"></div>
+        </div>
         <button class="send-btn" id="sendBtn">
             <i class="fas fa-paper-plane"></i>
         </button>

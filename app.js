@@ -85,6 +85,7 @@ let typingTimeout;
 let isUserScrolling = false;
 let messageReactions = JSON.parse(localStorage.getItem('messageReactions') || '{}'); // Store reactions per message ID
 let lastGameTime = 0;
+let activeMultiplayerGames = JSON.parse(localStorage.getItem('activeMultiplayerGames') || '{}'); // Track multiplayer games
 
 // Automod functions
 function checkAutomod(text) {
@@ -214,6 +215,397 @@ async function checkForGameResponse(text) {
     return false;
 }
 
+// Multiplayer Game System
+const MULTIPLAYER_GAMES = {
+    'battle': {
+        name: 'Team Battle',
+        emoji: '⚔️',
+        description: 'First to 3 wins! Type numbers 1-10 closest to random target wins round',
+        minPlayers: 2,
+        maxPlayers: 4
+    },
+    'quiz': {
+        name: 'Quiz Race',
+        emoji: '🧠',
+        description: 'Answer trivia questions! First correct answer gets points',
+        minPlayers: 2,
+        maxPlayers: 6
+    },
+    'number': {
+        name: 'Number War',
+        emoji: '🎲',
+        description: 'Highest number wins! Everyone rolls, highest total after 3 rounds wins',
+        minPlayers: 2,
+        maxPlayers: 5
+    },
+    'word': {
+        name: 'Word Chain',
+        emoji: '📝',
+        description: 'Build a word chain! Each word must start with last letter of previous word',
+        minPlayers: 2,
+        maxPlayers: 6
+    }
+};
+
+// Create a multiplayer game
+async function createMultiplayerGame(gameType) {
+    if (!MULTIPLAYER_GAMES[gameType]) {
+        showToast('❌ Invalid game type! Use: battle, quiz, number, or word');
+        return false;
+    }
+
+    const game = MULTIPLAYER_GAMES[gameType];
+    const gameId = 'game_' + Date.now();
+
+    activeMultiplayerGames[gameId] = {
+        id: gameId,
+        type: gameType,
+        creator: USER_ID,
+        players: [USER_ID],
+        status: 'waiting', // waiting, active, finished
+        createdAt: Date.now(),
+        rounds: [],
+        scores: { [USER_ID]: 0 }
+    };
+
+    localStorage.setItem('activeMultiplayerGames', JSON.stringify(activeMultiplayerGames));
+
+    const gameMessage = {
+        text: `${game.emoji} **${game.name}** started!\n${game.description}\n\nType "!join" to play! (${activeMultiplayerGames[gameId].players.length}/${game.maxPlayers} players)`,
+        image: null,
+        userId: 'game_system',
+        timestamp: Date.now(),
+        date: new Date().toLocaleString(),
+        isMultiplayerGame: true,
+        gameId: gameId
+    };
+
+    await addMessage(gameMessage);
+    await loadMessages(true);
+    scrollToBottom();
+
+    // Auto-start after 10 seconds if min players met
+    setTimeout(() => checkAndStartGame(gameId), 10000);
+
+    return true;
+}
+
+// Join a multiplayer game
+async function joinMultiplayerGame(gameId) {
+    const game = activeMultiplayerGames[gameId];
+    if (!game) {
+        showToast('❌ Game not found!');
+        return false;
+    }
+
+    if (game.status !== 'waiting') {
+        showToast('❌ Game already started!');
+        return false;
+    }
+
+    if (game.players.includes(USER_ID)) {
+        showToast('⚠️ You already joined!');
+        return false;
+    }
+
+    const gameInfo = MULTIPLAYER_GAMES[game.type];
+    if (game.players.length >= gameInfo.maxPlayers) {
+        showToast('❌ Game is full!');
+        return false;
+    }
+
+    game.players.push(USER_ID);
+    game.scores[USER_ID] = 0;
+    localStorage.setItem('activeMultiplayerGames', JSON.stringify(activeMultiplayerGames));
+
+    showToast(`✅ Joined ${gameInfo.name}!`);
+
+    // Update the game message
+    const gameMessage = {
+        text: `${gameInfo.emoji} **${gameInfo.name}**\n${game.players.length}/${gameInfo.maxPlayers} players joined!\n\nType "!join" to play or wait for game to start...`,
+        image: null,
+        userId: 'game_system',
+        timestamp: Date.now(),
+        date: new Date().toLocaleString(),
+        isMultiplayerGame: true,
+        gameId: gameId
+    };
+
+    await addMessage(gameMessage);
+    await loadMessages(true);
+    scrollToBottom();
+
+    // Check if we can start
+    if (game.players.length >= gameInfo.minPlayers) {
+        setTimeout(() => checkAndStartGame(gameId), 5000);
+    }
+
+    return true;
+}
+
+// Check and start game if ready
+async function checkAndStartGame(gameId) {
+    const game = activeMultiplayerGames[gameId];
+    if (!game || game.status !== 'waiting') return;
+
+    const gameInfo = MULTIPLAYER_GAMES[game.type];
+    if (game.players.length < gameInfo.minPlayers) {
+        showToast('⚠️ Not enough players. Game cancelled.');
+        delete activeMultiplayerGames[gameId];
+        localStorage.setItem('activeMultiplayerGames', JSON.stringify(activeMultiplayerGames));
+        return;
+    }
+
+    game.status = 'active';
+    localStorage.setItem('activeMultiplayerGames', JSON.stringify(activeMultiplayerGames));
+
+    const startMessage = {
+        text: `🎮 ${gameInfo.name} STARTING NOW!\nPlayers: ${game.players.length}\n\n${getGameInstructions(game.type)}`,
+        image: null,
+        userId: 'game_system',
+        timestamp: Date.now(),
+        date: new Date().toLocaleString(),
+        isMultiplayerGame: true,
+        gameId: gameId
+    };
+
+    await addMessage(startMessage);
+    await loadMessages(true);
+    scrollToBottom();
+
+    // Post first round
+    postGameRound(gameId);
+}
+
+// Get game-specific instructions
+function getGameInstructions(gameType) {
+    switch(gameType) {
+        case 'battle':
+            return '⚔️ Guess a number 1-10! Closest to target wins the round!\nFirst to 3 rounds wins!';
+        case 'quiz':
+            return '🧠 Answer the question correctly! First right answer gets a point!\nFirst to 3 points wins!';
+        case 'number':
+            return '🎲 Type "roll" to roll dice! Highest total after 3 rounds wins!';
+        case 'word':
+            return '📝 Continue the word chain! Last letter → First letter!\nMost words after 2 minutes wins!';
+        default:
+            return 'Game starting...';
+    }
+}
+
+// Post a game round
+async function postGameRound(gameId) {
+    const game = activeMultiplayerGames[gameId];
+    if (!game || game.status !== 'active') return;
+
+    const roundNum = game.rounds.length + 1;
+    let roundData = { number: roundNum, responses: {}, target: null, question: null };
+
+    switch(game.type) {
+        case 'battle':
+            roundData.target = Math.floor(Math.random() * 10) + 1;
+            roundData.prompt = `⚔️ ROUND ${roundNum}: Guess a number 1-10!`;
+            break;
+        case 'quiz':
+            const questions = [
+                { q: 'What is 2+2?', a: '4' },
+                { q: 'Capital of France?', a: 'paris' },
+                { q: 'How many days in a week?', a: '7' },
+                { q: 'What color is the sky?', a: 'blue' },
+                { q: 'Largest ocean?', a: 'pacific' }
+            ];
+            const quiz = questions[Math.floor(Math.random() * questions.length)];
+            roundData.question = quiz.q;
+            roundData.answer = quiz.a;
+            roundData.prompt = `🧠 ROUND ${roundNum}: ${quiz.q}`;
+            break;
+        case 'number':
+            roundData.prompt = `🎲 ROUND ${roundNum}: Type "roll" to roll dice!`;
+            break;
+        case 'word':
+            if (roundNum === 1) {
+                roundData.lastLetter = String.fromCharCode(97 + Math.floor(Math.random() * 26));
+                roundData.prompt = `📝 Start a word with letter: ${roundData.lastLetter.toUpperCase()}`;
+            }
+            break;
+    }
+
+    game.rounds.push(roundData);
+    localStorage.setItem('activeMultiplayerGames', JSON.stringify(activeMultiplayerGames));
+
+    const roundMessage = {
+        text: roundData.prompt,
+        image: null,
+        userId: 'game_system',
+        timestamp: Date.now(),
+        date: new Date().toLocaleString(),
+        isMultiplayerGame: true,
+        gameId: gameId,
+        roundNumber: roundNum
+    };
+
+    await addMessage(roundMessage);
+    await loadMessages(true);
+    scrollToBottom();
+}
+
+// Handle multiplayer game move
+async function handleGameMove(text) {
+    // Find active game for this user
+    const userGames = Object.values(activeMultiplayerGames).filter(g =>
+        g.players.includes(USER_ID) && g.status === 'active'
+    );
+
+    if (userGames.length === 0) return false;
+
+    const game = userGames[0];
+    const currentRound = game.rounds[game.rounds.length - 1];
+    if (!currentRound) return false;
+
+    // Check if already responded
+    if (currentRound.responses[USER_ID]) return false;
+
+    let response = null;
+    const lowerText = text.toLowerCase().trim();
+
+    switch(game.type) {
+        case 'battle':
+            const num = parseInt(lowerText);
+            if (num >= 1 && num <= 10) {
+                response = num;
+                currentRound.responses[USER_ID] = response;
+            }
+            break;
+        case 'quiz':
+            if (lowerText === currentRound.answer) {
+                response = lowerText;
+                currentRound.responses[USER_ID] = response;
+                currentRound.winner = USER_ID;
+            }
+            break;
+        case 'number':
+            if (lowerText.includes('roll')) {
+                response = Math.floor(Math.random() * 6) + 1;
+                currentRound.responses[USER_ID] = response;
+            }
+            break;
+        case 'word':
+            if (lowerText.length > 2 && /^[a-z]+$/.test(lowerText)) {
+                const firstLetter = lowerText[0];
+                const lastLetter = currentRound.lastLetter || '';
+                if (!lastLetter || firstLetter === lastLetter) {
+                    response = lowerText;
+                    currentRound.responses[USER_ID] = response;
+                    currentRound.lastLetter = lowerText[lowerText.length - 1];
+                }
+            }
+            break;
+    }
+
+    if (response !== null) {
+        localStorage.setItem('activeMultiplayerGames', JSON.stringify(activeMultiplayerGames));
+
+        // Check if round complete
+        const allResponded = game.players.every(p => currentRound.responses[p] !== undefined);
+        if (allResponded || currentRound.winner) {
+            setTimeout(() => finishRound(game.id), 2000);
+        }
+
+        return true;
+    }
+
+    return false;
+}
+
+// Finish a round
+async function finishRound(gameId) {
+    const game = activeMultiplayerGames[gameId];
+    if (!game) return;
+
+    const round = game.rounds[game.rounds.length - 1];
+    let resultText = '';
+    let winner = null;
+
+    switch(game.type) {
+        case 'battle':
+            let closest = null;
+            let closestDiff = 999;
+            Object.keys(round.responses).forEach(playerId => {
+                const diff = Math.abs(round.responses[playerId] - round.target);
+                if (diff < closestDiff) {
+                    closestDiff = diff;
+                    closest = playerId;
+                }
+            });
+            winner = closest;
+            game.scores[winner] = (game.scores[winner] || 0) + 1;
+            resultText = `⚔️ Target was ${round.target}! Winner: ${winner === USER_ID ? 'You' : 'Player'}\nScores: ${Object.values(game.scores).join(' - ')}`;
+            break;
+        case 'quiz':
+            winner = round.winner;
+            if (winner) {
+                game.scores[winner] = (game.scores[winner] || 0) + 1;
+                resultText = `🧠 Correct! Winner: ${winner === USER_ID ? 'You' : 'Player'}\nScores: ${Object.values(game.scores).join(' - ')}`;
+            }
+            break;
+        case 'number':
+            const rolls = Object.entries(round.responses).map(([pid, roll]) => `${pid === USER_ID ? 'You' : 'P'}: ${roll}`);
+            resultText = `🎲 Rolls: ${rolls.join(', ')}`;
+            break;
+        case 'word':
+            resultText = `📝 Words played: ${Object.values(round.responses).length}\nLast letter: ${round.lastLetter}`;
+            break;
+    }
+
+    localStorage.setItem('activeMultiplayerGames', JSON.stringify(activeMultiplayerGames));
+
+    const resultMessage = {
+        text: resultText,
+        image: null,
+        userId: 'game_system',
+        timestamp: Date.now(),
+        date: new Date().toLocaleString()
+    };
+
+    await addMessage(resultMessage);
+    await loadMessages(true);
+    scrollToBottom();
+
+    // Check if game over
+    const maxScore = Math.max(...Object.values(game.scores));
+    if (maxScore >= 3 || game.rounds.length >= 5) {
+        endGame(gameId);
+    } else {
+        setTimeout(() => postGameRound(gameId), 3000);
+    }
+}
+
+// End game
+async function endGame(gameId) {
+    const game = activeMultiplayerGames[gameId];
+    if (!game) return;
+
+    game.status = 'finished';
+
+    const winnerId = Object.entries(game.scores).reduce((a, b) => a[1] > b[1] ? a : b)[0];
+    const gameInfo = MULTIPLAYER_GAMES[game.type];
+
+    const endMessage = {
+        text: `🎉 ${gameInfo.name} FINISHED!\n\n🏆 Winner: ${winnerId === USER_ID ? 'YOU!' : 'Player'}\n\nFinal Scores:\n${Object.entries(game.scores).map(([p, s]) => `${p === USER_ID ? 'You' : 'Player'}: ${s}`).join('\n')}`,
+        image: null,
+        userId: 'game_system',
+        timestamp: Date.now(),
+        date: new Date().toLocaleString()
+    };
+
+    await addMessage(endMessage);
+    await loadMessages(true);
+    scrollToBottom();
+
+    delete activeMultiplayerGames[gameId];
+    localStorage.setItem('activeMultiplayerGames', JSON.stringify(activeMultiplayerGames));
+}
+
 // Send text message
 async function sendMessage() {
     const text = messageInput.value.trim();
@@ -227,11 +619,49 @@ async function sendMessage() {
         return;
     }
 
+    // Check for !game command
+    if (text.startsWith('!game')) {
+        const parts = text.split(' ');
+        const gameType = parts[1]?.toLowerCase();
+        messageInput.value = '';
+
+        if (!gameType) {
+            showToast('Usage: !game <type>\nTypes: battle, quiz, number, word');
+            return;
+        }
+
+        await createMultiplayerGame(gameType);
+        return;
+    }
+
+    // Check for !join command
+    if (text.toLowerCase() === '!join') {
+        messageInput.value = '';
+
+        // Find most recent game waiting for players
+        const waitingGames = Object.values(activeMultiplayerGames).filter(g => g.status === 'waiting');
+        if (waitingGames.length === 0) {
+            showToast('❌ No games available to join!');
+            return;
+        }
+
+        const latestGame = waitingGames[waitingGames.length - 1];
+        await joinMultiplayerGame(latestGame.id);
+        return;
+    }
+
+    // Check if playing multiplayer game
+    const isGameMove = await handleGameMove(text);
+    if (isGameMove) {
+        messageInput.value = '';
+        // Message will be sent normally to show the move
+    }
+
     // Check for game response
     const isGameResponse = await checkForGameResponse(text);
 
-    // Check automod (skip for game responses)
-    if (!isGameResponse) {
+    // Check automod (skip for game responses and moves)
+    if (!isGameResponse && !isGameMove) {
         const bannedWord = checkAutomod(text);
         if (bannedWord) {
             banUser(USER_ID);
@@ -467,7 +897,7 @@ function revealImage(img, btn) {
 }
 
 // Add reaction to message
-function addReaction(messageId, emoji, btn) {
+async function addReaction(messageId, emoji, btn) {
     if (!messageReactions[messageId]) {
         messageReactions[messageId] = {};
     }
@@ -501,6 +931,10 @@ function addReaction(messageId, emoji, btn) {
 
     // Save to localStorage
     localStorage.setItem('messageReactions', JSON.stringify(messageReactions));
+    console.log('Reactions saved:', messageReactions);
+
+    // Reload messages to sync across all message elements
+    await loadMessages(false);
 }
 
 // Format timestamp
@@ -666,7 +1100,47 @@ messageInput.addEventListener('keypress', (e) => {
 
 messageInput.addEventListener('input', () => {
     showTypingIndicator();
+    handleAutosuggest();
 });
+
+// Autosuggest functionality
+function handleAutosuggest() {
+    const text = messageInput.value.trim();
+    const autosuggestEl = document.getElementById('autosuggest');
+
+    if (text.startsWith('!game')) {
+        const parts = text.split(' ');
+        if (parts.length === 1 || (parts.length === 2 && parts[1].length < 10)) {
+            const query = (parts[1] || '').toLowerCase();
+            const suggestions = Object.entries(MULTIPLAYER_GAMES)
+                .filter(([key, game]) => key.includes(query) || game.name.toLowerCase().includes(query));
+
+            if (suggestions.length > 0) {
+                autosuggestEl.innerHTML = suggestions.map(([key, game]) => `
+                    <div class="autosuggest-item" onclick="selectGameSuggestion('${key}')">
+                        <span class="emoji">${game.emoji}</span>
+                        <div class="info">
+                            <span class="title">${game.name}</span>
+                            <span class="desc">${game.description}</span>
+                        </div>
+                    </div>
+                `).join('');
+                autosuggestEl.classList.add('active');
+                return;
+            }
+        }
+    }
+
+    autosuggestEl.classList.remove('active');
+}
+
+// Select game from autosuggest
+function selectGameSuggestion(gameType) {
+    messageInput.value = `!game ${gameType}`;
+    document.getElementById('autosuggest').classList.remove('active');
+    messageInput.focus();
+    sendMessage();
+}
 
 chatMessages.addEventListener('scroll', () => {
     updateScrollButton();
