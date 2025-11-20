@@ -186,7 +186,9 @@ document.getElementById('documentForm').addEventListener('submit', async (e) => 
     const content = editor.innerHTML;
     const category = document.getElementById('docCategory').value;
 
-    if (!content.trim()) {
+    // Check if editor has actual text content (not just HTML tags)
+    const textContent = editor.textContent || editor.innerText || '';
+    if (!textContent.trim()) {
         showToast('Please write some content');
         return;
     }
@@ -217,7 +219,7 @@ document.getElementById('documentForm').addEventListener('submit', async (e) => 
     } catch (error) {
         console.error('Error publishing document:', error);
         showLoading(false);
-        showToast('Error publishing document');
+        showToast('Error publishing document: ' + error.message);
     }
 });
 
