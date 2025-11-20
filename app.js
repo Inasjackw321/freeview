@@ -2,9 +2,6 @@
 let db;
 const DB_NAME = 'FreeViewDB';
 const DB_VERSION = 1;
-const CONTENT_STORE = 'content';
-const COMMENTS_STORE = 'comments';
-const LIKES_STORE = 'likes';
 
 // Initialize IndexedDB
 function initDB() {
@@ -20,35 +17,30 @@ function initDB() {
         request.onupgradeneeded = (event) => {
             db = event.target.result;
 
-            // Content store (videos + documents)
-            if (!db.objectStoreNames.contains(CONTENT_STORE)) {
-                const contentStore = db.createObjectStore(CONTENT_STORE, { keyPath: 'id', autoIncrement: true });
+            if (!db.objectStoreNames.contains('content')) {
+                const contentStore = db.createObjectStore('content', { keyPath: 'id', autoIncrement: true });
                 contentStore.createIndex('timestamp', 'timestamp', { unique: false });
                 contentStore.createIndex('type', 'type', { unique: false });
-                contentStore.createIndex('category', 'category', { unique: false });
             }
 
-            // Comments store
-            if (!db.objectStoreNames.contains(COMMENTS_STORE)) {
-                const commentsStore = db.createObjectStore(COMMENTS_STORE, { keyPath: 'id', autoIncrement: true });
+            if (!db.objectStoreNames.contains('comments')) {
+                const commentsStore = db.createObjectStore('comments', { keyPath: 'id', autoIncrement: true });
                 commentsStore.createIndex('contentId', 'contentId', { unique: false });
             }
 
-            // Likes store
-            if (!db.objectStoreNames.contains(LIKES_STORE)) {
-                const likesStore = db.createObjectStore(LIKES_STORE, { keyPath: 'contentId' });
+            if (!db.objectStoreNames.contains('likes')) {
+                db.createObjectStore('likes', { keyPath: 'contentId' });
             }
         };
     });
 }
 
 // Database operations
-async function addContent(contentData) {
+async function addContent(data) {
     return new Promise((resolve, reject) => {
-        const transaction = db.transaction([CONTENT_STORE], 'readwrite');
-        const store = transaction.objectStore(CONTENT_STORE);
-        const request = store.add(contentData);
-
+        const transaction = db.transaction(['content'], 'readwrite');
+        const store = transaction.objectStore('content');
+        const request = store.add(data);
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
     });
@@ -56,10 +48,9 @@ async function addContent(contentData) {
 
 async function getAllContent() {
     return new Promise((resolve, reject) => {
-        const transaction = db.transaction([CONTENT_STORE], 'readonly');
-        const store = transaction.objectStore(CONTENT_STORE);
+        const transaction = db.transaction(['content'], 'readonly');
+        const store = transaction.objectStore('content');
         const request = store.getAll();
-
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
     });
@@ -67,21 +58,19 @@ async function getAllContent() {
 
 async function getContent(id) {
     return new Promise((resolve, reject) => {
-        const transaction = db.transaction([CONTENT_STORE], 'readonly');
-        const store = transaction.objectStore(CONTENT_STORE);
+        const transaction = db.transaction(['content'], 'readonly');
+        const store = transaction.objectStore('content');
         const request = store.get(id);
-
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
     });
 }
 
-async function addComment(commentData) {
+async function addComment(data) {
     return new Promise((resolve, reject) => {
-        const transaction = db.transaction([COMMENTS_STORE], 'readwrite');
-        const store = transaction.objectStore(COMMENTS_STORE);
-        const request = store.add(commentData);
-
+        const transaction = db.transaction(['comments'], 'readwrite');
+        const store = transaction.objectStore('comments');
+        const request = store.add(data);
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
     });
@@ -89,11 +78,10 @@ async function addComment(commentData) {
 
 async function getComments(contentId) {
     return new Promise((resolve, reject) => {
-        const transaction = db.transaction([COMMENTS_STORE], 'readonly');
-        const store = transaction.objectStore(COMMENTS_STORE);
+        const transaction = db.transaction(['comments'], 'readonly');
+        const store = transaction.objectStore('comments');
         const index = store.index('contentId');
         const request = index.getAll(contentId);
-
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
     });
@@ -101,10 +89,9 @@ async function getComments(contentId) {
 
 async function getLikes(contentId) {
     return new Promise((resolve, reject) => {
-        const transaction = db.transaction([LIKES_STORE], 'readonly');
-        const store = transaction.objectStore(LIKES_STORE);
+        const transaction = db.transaction(['likes'], 'readonly');
+        const store = transaction.objectStore('likes');
         const request = store.get(contentId);
-
         request.onsuccess = () => resolve(request.result || { contentId, count: 0, liked: false });
         request.onerror = () => reject(request.error);
     });
@@ -119,188 +106,240 @@ async function toggleLike(contentId) {
             liked: !likes.liked
         };
 
-        const transaction = db.transaction([LIKES_STORE], 'readwrite');
-        const store = transaction.objectStore(LIKES_STORE);
+        const transaction = db.transaction(['likes'], 'readwrite');
+        const store = transaction.objectStore('likes');
         const request = store.put(newLikes);
-
         request.onsuccess = () => resolve(newLikes);
         request.onerror = () => reject(request.error);
     });
 }
 
 // UI State
-let currentFilter = 'all';
-let currentCategory = null;
 let currentContentId = null;
-let currentUploadType = 'video';
-let allContentItems = [];
+let currentFilter = 'all';
+let currentFile = null;
 
-// UI Elements
-const sidebar = document.getElementById('sidebar');
-const menuToggle = document.getElementById('menuToggle');
-const mainContainer = document.querySelector('.main-container');
-const uploadModal = document.getElementById('uploadModal');
-const detailModal = document.getElementById('detailModal');
-const uploadBtn = document.getElementById('uploadBtn');
-const uploadForm = document.getElementById('uploadForm');
-const contentFile = document.getElementById('contentFile');
-const fileInfo = document.getElementById('fileInfo');
-const contentGrid = document.getElementById('contentGrid');
-const noContent = document.getElementById('noContent');
-const loadingSpinner = document.getElementById('loadingSpinner');
-const toast = document.getElementById('toast');
-const toastMessage = document.getElementById('toastMessage');
-const searchInput = document.getElementById('searchInput');
-const searchBtn = document.getElementById('searchBtn');
-
-// Menu toggle
-menuToggle.addEventListener('click', () => {
-    sidebar.classList.toggle('show');
-    sidebar.classList.toggle('hidden');
-});
-
-// Close modals
-document.querySelectorAll('.close-btn').forEach(btn => {
+// Tab Navigation
+document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-        uploadModal.classList.remove('active');
-        detailModal.classList.remove('active');
-    });
-});
+        const tab = btn.dataset.tab;
 
-uploadModal.addEventListener('click', (e) => {
-    if (e.target === uploadModal) {
-        uploadModal.classList.remove('active');
-    }
-});
-
-detailModal.addEventListener('click', (e) => {
-    if (e.target === detailModal) {
-        detailModal.classList.remove('active');
-    }
-});
-
-// Upload button
-uploadBtn.addEventListener('click', () => {
-    uploadModal.classList.add('active');
-});
-
-// Upload type selector
-document.querySelectorAll('.type-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-        document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
+        // Update buttons
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
-        currentUploadType = btn.dataset.type;
-        updateFileAccept();
+
+        // Update tabs
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+        document.getElementById(`${tab}-tab`).classList.add('active');
+
+        // Load content when browsing
+        if (tab === 'browse') {
+            loadContent();
+        }
     });
 });
 
-function updateFileAccept() {
-    const accepts = {
-        video: 'video/*',
-        document: '.pdf,.doc,.docx,.txt,.rtf,.odt',
-        image: 'image/*'
-    };
-    contentFile.setAttribute('accept', accepts[currentUploadType] || '*');
-}
+// Create Options
+document.querySelectorAll('.option-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const option = btn.dataset.option;
 
-// File input change
-contentFile.addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (file) {
-        const size = (file.size / (1024 * 1024)).toFixed(2);
-        fileInfo.textContent = `Selected: ${file.name} (${size} MB)`;
-        fileInfo.classList.add('active');
-    }
+        // Update buttons
+        document.querySelectorAll('.option-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        // Update sections
+        document.querySelectorAll('.creator-section').forEach(s => s.classList.remove('active'));
+        document.getElementById(`${option}-creator`).classList.add('active');
+    });
 });
 
-// Upload form submit
-uploadForm.addEventListener('submit', async (e) => {
+// Rich Text Editor Toolbar
+const editor = document.getElementById('editor');
+const fontSize = document.getElementById('fontSize');
+const textColor = document.getElementById('textColor');
+
+document.querySelectorAll('.toolbar-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        const command = btn.dataset.command;
+        document.execCommand(command, false, null);
+        editor.focus();
+    });
+});
+
+fontSize.addEventListener('change', () => {
+    document.execCommand('fontSize', false, fontSize.value);
+    editor.focus();
+});
+
+textColor.addEventListener('change', () => {
+    document.execCommand('foreColor', false, textColor.value);
+    editor.focus();
+});
+
+// Document Form Submit
+document.getElementById('documentForm').addEventListener('submit', async (e) => {
     e.preventDefault();
 
-    const file = contentFile.files[0];
-    const title = document.getElementById('contentTitle').value;
-    const description = document.getElementById('contentDescription').value;
-    const category = document.getElementById('contentCategory').value;
+    const title = document.getElementById('docTitle').value;
+    const content = editor.innerHTML;
+    const category = document.getElementById('docCategory').value;
 
-    if (!file) {
-        showToast('Please select a file');
+    if (!content.trim()) {
+        showToast('Please write some content');
         return;
     }
 
     showLoading(true);
 
     try {
-        const fileData = await fileToBase64(file);
-        const fileType = getFileType(file);
+        const data = {
+            type: 'document',
+            title,
+            content,
+            category,
+            timestamp: Date.now(),
+            date: new Date().toLocaleDateString()
+        };
+
+        await addContent(data);
+
+        showLoading(false);
+        showToast('Document published successfully!');
+
+        // Reset form
+        document.getElementById('documentForm').reset();
+        editor.innerHTML = '';
+
+        // Switch to browse tab
+        document.querySelector('[data-tab="browse"]').click();
+    } catch (error) {
+        console.error('Error publishing document:', error);
+        showLoading(false);
+        showToast('Error publishing document');
+    }
+});
+
+// File Upload - Drag and Drop
+const uploadArea = document.getElementById('uploadArea');
+const fileInput = document.getElementById('fileInput');
+const uploadPreview = document.getElementById('uploadPreview');
+const fileName = document.getElementById('fileName');
+const fileSize = document.getElementById('fileSize');
+
+uploadArea.addEventListener('click', () => {
+    fileInput.click();
+});
+
+uploadArea.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    uploadArea.style.borderColor = 'var(--accent)';
+});
+
+uploadArea.addEventListener('dragleave', () => {
+    uploadArea.style.borderColor = '';
+});
+
+uploadArea.addEventListener('drop', (e) => {
+    e.preventDefault();
+    uploadArea.style.borderColor = '';
+
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+        handleFileSelect(files[0]);
+    }
+});
+
+fileInput.addEventListener('change', (e) => {
+    if (e.target.files.length > 0) {
+        handleFileSelect(e.target.files[0]);
+    }
+});
+
+function handleFileSelect(file) {
+    currentFile = file;
+
+    fileName.textContent = file.name;
+    fileSize.textContent = `${(file.size / (1024 * 1024)).toFixed(2)} MB`;
+
+    uploadArea.style.display = 'none';
+    uploadPreview.style.display = 'block';
+}
+
+document.getElementById('removeFile').addEventListener('click', () => {
+    currentFile = null;
+    fileInput.value = '';
+    uploadArea.style.display = 'block';
+    uploadPreview.style.display = 'none';
+});
+
+// Upload Form Submit
+document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    if (!currentFile) {
+        showToast('Please select a file');
+        return;
+    }
+
+    const title = document.getElementById('uploadTitle').value;
+    const description = document.getElementById('uploadDescription').value;
+    const category = document.getElementById('uploadCategory').value;
+
+    showLoading(true);
+
+    try {
+        const fileData = await fileToBase64(currentFile);
+        const fileType = getFileType(currentFile);
 
         let thumbnail = null;
         if (fileType === 'video') {
-            thumbnail = await generateVideoThumbnail(file);
+            thumbnail = await generateVideoThumbnail(currentFile);
         } else if (fileType === 'image') {
             thumbnail = fileData;
-        } else {
-            thumbnail = getDocumentIcon(file.name);
         }
 
-        const contentData = {
+        const data = {
+            type: fileType,
             title,
             description,
             category,
-            type: fileType,
             fileData,
-            fileName: file.name,
-            fileType: file.type,
+            fileName: currentFile.name,
             thumbnail,
             timestamp: Date.now(),
             date: new Date().toLocaleDateString()
         };
 
-        await addContent(contentData);
+        await addContent(data);
 
         showLoading(false);
-        uploadModal.classList.remove('active');
-        uploadForm.reset();
-        fileInfo.classList.remove('active');
+        showToast('File uploaded successfully!');
 
-        showToast(`${fileType.charAt(0).toUpperCase() + fileType.slice(1)} uploaded successfully!`);
-        loadContent();
+        // Reset form
+        document.getElementById('uploadForm').reset();
+        currentFile = null;
+        uploadArea.style.display = 'block';
+        uploadPreview.style.display = 'none';
+
+        // Switch to browse tab
+        document.querySelector('[data-tab="browse"]').click();
     } catch (error) {
-        console.error('Error uploading:', error);
+        console.error('Error uploading file:', error);
         showLoading(false);
-        showToast('Error uploading file. File might be too large.');
+        showToast('Error uploading file. It might be too large.');
     }
 });
 
-// Get file type
+// Helper functions
 function getFileType(file) {
     if (file.type.startsWith('video/')) return 'video';
     if (file.type.startsWith('image/')) return 'image';
-    if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) return 'pdf';
+    if (file.type === 'application/pdf') return 'pdf';
     return 'document';
 }
 
-// Get document icon
-function getDocumentIcon(fileName) {
-    const ext = fileName.split('.').pop().toLowerCase();
-    const icons = {
-        'pdf': 'fa-file-pdf',
-        'doc': 'fa-file-word',
-        'docx': 'fa-file-word',
-        'txt': 'fa-file-alt',
-        'rtf': 'fa-file-alt',
-        'xls': 'fa-file-excel',
-        'xlsx': 'fa-file-excel',
-        'ppt': 'fa-file-powerpoint',
-        'pptx': 'fa-file-powerpoint',
-        'zip': 'fa-file-archive',
-        'rar': 'fa-file-archive'
-    };
-
-    const iconClass = icons[ext] || 'fa-file';
-    return `<i class="fas ${iconClass}"></i>`;
-}
-
-// File to base64
 function fileToBase64(file) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -310,9 +349,8 @@ function fileToBase64(file) {
     });
 }
 
-// Generate video thumbnail
 function generateVideoThumbnail(file) {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
         const video = document.createElement('video');
         const canvas = document.createElement('canvas');
 
@@ -320,7 +358,7 @@ function generateVideoThumbnail(file) {
         video.src = URL.createObjectURL(file);
 
         video.onloadedmetadata = () => {
-            video.currentTime = Math.min(1, video.duration / 2);
+            video.currentTime = 1;
         };
 
         video.onseeked = () => {
@@ -341,59 +379,44 @@ function generateVideoThumbnail(file) {
     });
 }
 
+// Browse - Filter buttons
+document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        currentFilter = btn.dataset.filter;
+        loadContent();
+    });
+});
+
 // Load and display content
-async function loadContent(filter = currentFilter, category = currentCategory, searchTerm = '') {
+async function loadContent() {
     try {
-        allContentItems = await getAllContent();
+        let allContent = await getAllContent();
 
-        let filtered = allContentItems;
-
-        // Apply filters
-        if (filter === 'videos') {
-            filtered = filtered.filter(item => item.type === 'video');
-        } else if (filter === 'documents') {
-            filtered = filtered.filter(item => ['document', 'pdf'].includes(item.type));
-        } else if (filter === 'images') {
-            filtered = filtered.filter(item => item.type === 'image');
-        } else if (filter === 'pdfs') {
-            filtered = filtered.filter(item => item.type === 'pdf');
-        } else if (filter === 'liked') {
-            const likedIds = [];
-            for (const item of allContentItems) {
-                const likes = await getLikes(item.id);
-                if (likes.liked) likedIds.push(item.id);
-            }
-            filtered = filtered.filter(item => likedIds.includes(item.id));
+        // Filter
+        if (currentFilter !== 'all') {
+            allContent = allContent.filter(item => item.type === currentFilter);
         }
 
-        // Apply category filter
-        if (category) {
-            filtered = filtered.filter(item => item.category === category);
-        }
+        // Sort by timestamp
+        allContent.sort((a, b) => b.timestamp - a.timestamp);
 
-        // Apply search filter
-        if (searchTerm) {
-            const term = searchTerm.toLowerCase();
-            filtered = filtered.filter(item =>
-                item.title.toLowerCase().includes(term) ||
-                item.description.toLowerCase().includes(term)
-            );
-        }
+        const contentGrid = document.getElementById('contentGrid');
+        const noContent = document.getElementById('noContent');
 
-        if (filtered.length === 0) {
-            noContent.style.display = 'block';
+        if (allContent.length === 0) {
             contentGrid.style.display = 'none';
+            noContent.style.display = 'block';
             return;
         }
 
-        noContent.style.display = 'none';
         contentGrid.style.display = 'grid';
+        noContent.style.display = 'none';
         contentGrid.innerHTML = '';
 
-        // Sort by timestamp (newest first)
-        filtered.sort((a, b) => b.timestamp - a.timestamp);
-
-        for (const item of filtered) {
+        for (const item of allContent) {
             const likes = await getLikes(item.id);
             const card = createContentCard(item, likes);
             contentGrid.appendChild(card);
@@ -408,36 +431,29 @@ async function loadContent(filter = currentFilter, category = currentCategory, s
 function createContentCard(item, likes) {
     const card = document.createElement('div');
     card.className = 'content-card';
-    card.onclick = () => openContentDetail(item.id);
+    card.onclick = () => openContent(item.id);
 
-    const thumbnailHtml = item.thumbnail && !item.thumbnail.startsWith('<i')
-        ? `<img src="${item.thumbnail}" alt="${item.title}" class="content-thumbnail">`
-        : `<div class="content-thumbnail" style="display: flex; align-items: center; justify-content: center; font-size: 3rem; color: rgba(255,255,255,0.5);">${item.thumbnail || '<i class="fas fa-file"></i>'}</div>`;
-
-    const typeIcons = {
-        video: 'fa-video',
-        image: 'fa-image',
-        pdf: 'fa-file-pdf',
-        document: 'fa-file-alt'
-    };
+    let thumbHtml = '';
+    if (item.type === 'document') {
+        thumbHtml = `<div class="content-card-thumb" style="display: flex; align-items: center; justify-content: center; font-size: 3rem;"><i class="fas fa-file-alt"></i></div>`;
+    } else if (item.thumbnail) {
+        thumbHtml = `<img src="${item.thumbnail}" class="content-card-thumb" alt="${item.title}">`;
+    } else {
+        thumbHtml = `<div class="content-card-thumb" style="display: flex; align-items: center; justify-content: center; font-size: 3rem;"><i class="fas fa-file"></i></div>`;
+    }
 
     card.innerHTML = `
-        ${thumbnailHtml}
+        ${thumbHtml}
         <div class="content-card-body">
-            <div class="content-card-header">
-                <div class="card-icon">
-                    <i class="fas ${typeIcons[item.type] || 'fa-file'}"></i>
-                </div>
-                <div class="card-info">
-                    <h3 class="card-title">${escapeHtml(item.title)}</h3>
-                    <div class="card-meta">
-                        <span class="card-type-badge">${item.type.toUpperCase()}</span>
-                        <span class="separator">•</span>
-                        <span><i class="fas fa-heart"></i> ${likes.count}</span>
-                        <span class="separator">•</span>
-                        <span>${item.date}</span>
-                    </div>
-                </div>
+            <h3 class="content-card-title">${escapeHtml(item.title)}</h3>
+            <div class="content-card-info">
+                <i class="fas fa-user-circle"></i>
+                <span>Anonymous</span>
+                <i class="fas fa-check-circle verified" title="Verified"></i>
+            </div>
+            <div class="content-card-meta">
+                <span><i class="fas fa-heart"></i> ${likes.count}</span>
+                <span>${item.date}</span>
             </div>
         </div>
     `;
@@ -445,8 +461,8 @@ function createContentCard(item, likes) {
     return card;
 }
 
-// Open content detail
-async function openContentDetail(contentId) {
+// Open content in modal
+async function openContent(contentId) {
     currentContentId = contentId;
 
     try {
@@ -454,41 +470,42 @@ async function openContentDetail(contentId) {
         const likes = await getLikes(contentId);
         const comments = await getComments(contentId);
 
-        // Hide all viewers first
-        document.getElementById('detailVideo').style.display = 'none';
-        document.getElementById('detailImage').style.display = 'none';
-        document.getElementById('detailDocument').style.display = 'none';
-        document.getElementById('detailDocumentPreview').style.display = 'none';
+        // Hide all viewers
+        document.getElementById('videoViewer').style.display = 'none';
+        document.getElementById('imageViewer').style.display = 'none';
+        document.getElementById('documentViewer').style.display = 'none';
+        document.getElementById('pdfViewer').style.display = 'none';
 
         // Show appropriate viewer
         if (item.type === 'video') {
-            const videoEl = document.getElementById('detailVideo');
+            const videoEl = document.getElementById('videoViewer');
             videoEl.src = item.fileData;
             videoEl.style.display = 'block';
         } else if (item.type === 'image') {
-            const imgEl = document.getElementById('detailImage');
+            const imgEl = document.getElementById('imageViewer');
             imgEl.src = item.fileData;
             imgEl.style.display = 'block';
         } else if (item.type === 'pdf') {
-            const iframeEl = document.getElementById('detailDocument');
-            iframeEl.src = item.fileData;
-            iframeEl.style.display = 'block';
-        } else {
-            const previewEl = document.getElementById('detailDocumentPreview');
-            previewEl.querySelector('i').className = `fas ${getDocumentIconClass(item.fileName)}`;
-            previewEl.style.display = 'flex';
+            const pdfEl = document.getElementById('pdfViewer');
+            pdfEl.src = item.fileData;
+            pdfEl.style.display = 'block';
+        } else if (item.type === 'document') {
+            const docEl = document.getElementById('documentViewer');
+            docEl.innerHTML = item.content;
+            docEl.style.display = 'block';
         }
 
-        // Set download link
-        const downloadLink = document.getElementById('downloadLink');
-        downloadLink.href = item.fileData;
-        downloadLink.download = item.fileName;
-
-        // Set content details
+        // Set details
         document.getElementById('detailTitle').textContent = item.title;
-        document.getElementById('detailDescription').textContent = item.description || 'No description provided.';
-        document.getElementById('detailDate').textContent = `Uploaded on ${item.date}`;
-        document.getElementById('detailCategory').textContent = item.category.charAt(0).toUpperCase() + item.category.slice(1);
+        document.getElementById('detailDate').textContent = item.date;
+
+        const descSection = document.getElementById('detailDescription');
+        if (item.description) {
+            descSection.textContent = item.description;
+            descSection.style.display = 'block';
+        } else {
+            descSection.style.display = 'none';
+        }
 
         // Set likes
         const likeBtn = document.getElementById('likeBtn');
@@ -503,41 +520,27 @@ async function openContentDetail(contentId) {
             likeBtn.querySelector('i').className = 'far fa-heart';
         }
 
-        // Load comments
+        // Display comments
         displayComments(comments);
 
-        detailModal.classList.add('active');
+        // Show modal
+        document.getElementById('detailModal').classList.add('active');
     } catch (error) {
         console.error('Error opening content:', error);
         showToast('Error loading content');
     }
 }
 
-function getDocumentIconClass(fileName) {
-    const ext = fileName.split('.').pop().toLowerCase();
-    const icons = {
-        'pdf': 'fa-file-pdf',
-        'doc': 'fa-file-word',
-        'docx': 'fa-file-word',
-        'txt': 'fa-file-alt',
-        'rtf': 'fa-file-alt',
-        'xls': 'fa-file-excel',
-        'xlsx': 'fa-file-excel',
-        'ppt': 'fa-file-powerpoint',
-        'pptx': 'fa-file-powerpoint'
-    };
-    return icons[ext] || 'fa-file';
-}
-
 // Display comments
 function displayComments(comments) {
     const commentsList = document.getElementById('commentsList');
     const commentCount = document.getElementById('commentCount');
-    commentsList.innerHTML = '';
+
     commentCount.textContent = comments.length;
+    commentsList.innerHTML = '';
 
     if (comments.length === 0) {
-        commentsList.innerHTML = '<div class="no-comments">No comments yet. Be the first to comment!</div>';
+        commentsList.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 2rem;">No comments yet. Be the first!</p>';
         return;
     }
 
@@ -547,16 +550,26 @@ function displayComments(comments) {
         const commentEl = document.createElement('div');
         commentEl.className = 'comment';
         commentEl.innerHTML = `
-            <div class="comment-author">
+            <div class="comment-header">
                 <i class="fas fa-user-circle"></i>
-                ${escapeHtml(comment.author)}
+                <span>Anonymous User</span>
+                <i class="fas fa-check-circle verified" title="Verified"></i>
+                <span class="comment-date">${comment.date}</span>
             </div>
             <div class="comment-text">${escapeHtml(comment.text)}</div>
-            <div class="comment-date">${comment.date}</div>
         `;
         commentsList.appendChild(commentEl);
     });
 }
+
+// Modal controls
+document.getElementById('closeModal').addEventListener('click', () => {
+    document.getElementById('detailModal').classList.remove('active');
+});
+
+document.querySelector('.modal-overlay').addEventListener('click', () => {
+    document.getElementById('detailModal').classList.remove('active');
+});
 
 // Like button
 document.getElementById('likeBtn').addEventListener('click', async () => {
@@ -586,24 +599,48 @@ document.getElementById('likeBtn').addEventListener('click', async () => {
     }
 });
 
+// Download button
+document.getElementById('downloadBtn').addEventListener('click', async () => {
+    if (!currentContentId) return;
+
+    try {
+        const item = await getContent(currentContentId);
+
+        if (item.type === 'document') {
+            // Download document as HTML
+            const blob = new Blob([item.content], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${item.title}.html`;
+            a.click();
+            URL.revokeObjectURL(url);
+        } else {
+            // Download file
+            const a = document.createElement('a');
+            a.href = item.fileData;
+            a.download = item.fileName || `${item.title}.${item.type}`;
+            a.click();
+        }
+
+        showToast('Download started!');
+    } catch (error) {
+        console.error('Error downloading:', error);
+        showToast('Error downloading file');
+    }
+});
+
 // Share button
 document.getElementById('shareBtn').addEventListener('click', () => {
     if (navigator.share) {
         navigator.share({
             title: document.getElementById('detailTitle').textContent,
-            text: document.getElementById('detailDescription').textContent,
             url: window.location.href
         }).catch(() => {});
     } else {
         navigator.clipboard.writeText(window.location.href);
         showToast('Link copied to clipboard!');
     }
-});
-
-// Download button
-document.getElementById('downloadBtn').addEventListener('click', () => {
-    document.getElementById('downloadLink').click();
-    showToast('Download started!');
 });
 
 // Comment functionality
@@ -616,7 +653,6 @@ document.getElementById('commentBtn').addEventListener('click', async () => {
     try {
         const commentData = {
             contentId: currentContentId,
-            author: 'Anonymous User',
             text,
             timestamp: Date.now(),
             date: new Date().toLocaleString()
@@ -641,80 +677,14 @@ document.getElementById('commentInput').addEventListener('keypress', (e) => {
     }
 });
 
-// Filter chips
-document.querySelectorAll('.filter-chips .chip').forEach(chip => {
-    chip.addEventListener('click', () => {
-        document.querySelectorAll('.filter-chips .chip').forEach(c => c.classList.remove('active'));
-        chip.classList.add('active');
-        currentFilter = chip.dataset.filter;
-        currentCategory = null;
-        loadContent(currentFilter);
-    });
-});
-
-// Sidebar navigation
-document.querySelectorAll('.sidebar-item[data-filter]').forEach(item => {
-    item.addEventListener('click', (e) => {
-        e.preventDefault();
-        document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
-        item.classList.add('active');
-        currentFilter = item.dataset.filter;
-        currentCategory = null;
-
-        // Update chips
-        const chipFilter = currentFilter === 'videos' ? 'videos' :
-                          currentFilter === 'documents' ? 'documents' :
-                          currentFilter === 'liked' ? 'all' : 'all';
-        document.querySelectorAll('.filter-chips .chip').forEach(c => c.classList.remove('active'));
-        document.querySelector(`.filter-chips .chip[data-filter="${chipFilter}"]`)?.classList.add('active');
-
-        loadContent(currentFilter);
-    });
-});
-
-document.querySelectorAll('.sidebar-item[data-category]').forEach(item => {
-    item.addEventListener('click', (e) => {
-        e.preventDefault();
-        document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
-        item.classList.add('active');
-        currentFilter = 'all';
-        currentCategory = item.dataset.category;
-
-        document.querySelectorAll('.filter-chips .chip').forEach(c => c.classList.remove('active'));
-        document.querySelector('.filter-chips .chip[data-filter="all"]')?.classList.add('active');
-
-        loadContent(currentFilter, currentCategory);
-    });
-});
-
-// Search functionality
-function performSearch() {
-    const searchTerm = searchInput.value.trim();
-    loadContent(currentFilter, currentCategory, searchTerm);
-
-    if (searchTerm) {
-        showToast(`Searching for "${searchTerm}"`);
-    }
-}
-
-searchBtn.addEventListener('click', performSearch);
-searchInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-        performSearch();
-    }
-});
-
 // Utility functions
 function showLoading(show) {
-    if (show) {
-        loadingSpinner.classList.add('active');
-    } else {
-        loadingSpinner.classList.remove('active');
-    }
+    document.getElementById('loading').classList.toggle('active', show);
 }
 
 function showToast(message) {
-    toastMessage.textContent = message;
+    const toast = document.getElementById('toast');
+    document.getElementById('toastMessage').textContent = message;
     toast.classList.add('active');
 
     setTimeout(() => {
@@ -728,11 +698,10 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-// Initialize app
+// Initialize
 async function init() {
     try {
         await initDB();
-        await loadContent();
         console.log('FreeView initialized successfully!');
     } catch (error) {
         console.error('Error initializing app:', error);
