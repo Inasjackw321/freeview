@@ -2,7 +2,7 @@
 let db;
 const DB_NAME = 'FreeViewDB';
 const DB_VERSION = 1;
-const VIDEOS_STORE = 'videos';
+const CONTENT_STORE = 'content';
 const COMMENTS_STORE = 'comments';
 const LIKES_STORE = 'likes';
 
@@ -20,42 +20,44 @@ function initDB() {
         request.onupgradeneeded = (event) => {
             db = event.target.result;
 
-            // Videos store
-            if (!db.objectStoreNames.contains(VIDEOS_STORE)) {
-                const videosStore = db.createObjectStore(VIDEOS_STORE, { keyPath: 'id', autoIncrement: true });
-                videosStore.createIndex('timestamp', 'timestamp', { unique: false });
+            // Content store (videos + documents)
+            if (!db.objectStoreNames.contains(CONTENT_STORE)) {
+                const contentStore = db.createObjectStore(CONTENT_STORE, { keyPath: 'id', autoIncrement: true });
+                contentStore.createIndex('timestamp', 'timestamp', { unique: false });
+                contentStore.createIndex('type', 'type', { unique: false });
+                contentStore.createIndex('category', 'category', { unique: false });
             }
 
             // Comments store
             if (!db.objectStoreNames.contains(COMMENTS_STORE)) {
                 const commentsStore = db.createObjectStore(COMMENTS_STORE, { keyPath: 'id', autoIncrement: true });
-                commentsStore.createIndex('videoId', 'videoId', { unique: false });
+                commentsStore.createIndex('contentId', 'contentId', { unique: false });
             }
 
             // Likes store
             if (!db.objectStoreNames.contains(LIKES_STORE)) {
-                const likesStore = db.createObjectStore(LIKES_STORE, { keyPath: 'videoId' });
+                const likesStore = db.createObjectStore(LIKES_STORE, { keyPath: 'contentId' });
             }
         };
     });
 }
 
 // Database operations
-async function addVideo(videoData) {
+async function addContent(contentData) {
     return new Promise((resolve, reject) => {
-        const transaction = db.transaction([VIDEOS_STORE], 'readwrite');
-        const store = transaction.objectStore(VIDEOS_STORE);
-        const request = store.add(videoData);
+        const transaction = db.transaction([CONTENT_STORE], 'readwrite');
+        const store = transaction.objectStore(CONTENT_STORE);
+        const request = store.add(contentData);
 
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
     });
 }
 
-async function getAllVideos() {
+async function getAllContent() {
     return new Promise((resolve, reject) => {
-        const transaction = db.transaction([VIDEOS_STORE], 'readonly');
-        const store = transaction.objectStore(VIDEOS_STORE);
+        const transaction = db.transaction([CONTENT_STORE], 'readonly');
+        const store = transaction.objectStore(CONTENT_STORE);
         const request = store.getAll();
 
         request.onsuccess = () => resolve(request.result);
@@ -63,10 +65,10 @@ async function getAllVideos() {
     });
 }
 
-async function getVideo(id) {
+async function getContent(id) {
     return new Promise((resolve, reject) => {
-        const transaction = db.transaction([VIDEOS_STORE], 'readonly');
-        const store = transaction.objectStore(VIDEOS_STORE);
+        const transaction = db.transaction([CONTENT_STORE], 'readonly');
+        const store = transaction.objectStore(CONTENT_STORE);
         const request = store.get(id);
 
         request.onsuccess = () => resolve(request.result);
@@ -85,34 +87,34 @@ async function addComment(commentData) {
     });
 }
 
-async function getComments(videoId) {
+async function getComments(contentId) {
     return new Promise((resolve, reject) => {
         const transaction = db.transaction([COMMENTS_STORE], 'readonly');
         const store = transaction.objectStore(COMMENTS_STORE);
-        const index = store.index('videoId');
-        const request = index.getAll(videoId);
+        const index = store.index('contentId');
+        const request = index.getAll(contentId);
 
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
     });
 }
 
-async function getLikes(videoId) {
+async function getLikes(contentId) {
     return new Promise((resolve, reject) => {
         const transaction = db.transaction([LIKES_STORE], 'readonly');
         const store = transaction.objectStore(LIKES_STORE);
-        const request = store.get(videoId);
+        const request = store.get(contentId);
 
-        request.onsuccess = () => resolve(request.result || { videoId, count: 0, liked: false });
+        request.onsuccess = () => resolve(request.result || { contentId, count: 0, liked: false });
         request.onerror = () => reject(request.error);
     });
 }
 
-async function toggleLike(videoId) {
+async function toggleLike(contentId) {
     return new Promise(async (resolve, reject) => {
-        const likes = await getLikes(videoId);
+        const likes = await getLikes(contentId);
         const newLikes = {
-            videoId,
+            contentId,
             count: likes.liked ? likes.count - 1 : likes.count + 1,
             liked: !likes.liked
         };
@@ -126,38 +128,54 @@ async function toggleLike(videoId) {
     });
 }
 
+// UI State
+let currentFilter = 'all';
+let currentCategory = null;
+let currentContentId = null;
+let currentUploadType = 'video';
+let allContentItems = [];
+
 // UI Elements
-const uploadBtn = document.getElementById('uploadBtn');
+const sidebar = document.getElementById('sidebar');
+const menuToggle = document.getElementById('menuToggle');
+const mainContainer = document.querySelector('.main-container');
 const uploadModal = document.getElementById('uploadModal');
-const videoModal = document.getElementById('videoModal');
+const detailModal = document.getElementById('detailModal');
+const uploadBtn = document.getElementById('uploadBtn');
 const uploadForm = document.getElementById('uploadForm');
-const videoFile = document.getElementById('videoFile');
+const contentFile = document.getElementById('contentFile');
 const fileInfo = document.getElementById('fileInfo');
-const videoGrid = document.getElementById('videoGrid');
-const noVideos = document.getElementById('noVideos');
+const contentGrid = document.getElementById('contentGrid');
+const noContent = document.getElementById('noContent');
 const loadingSpinner = document.getElementById('loadingSpinner');
 const toast = document.getElementById('toast');
 const toastMessage = document.getElementById('toastMessage');
+const searchInput = document.getElementById('searchInput');
+const searchBtn = document.getElementById('searchBtn');
 
-// Modal controls
-const closeButtons = document.querySelectorAll('.close-btn');
-closeButtons.forEach(btn => {
+// Menu toggle
+menuToggle.addEventListener('click', () => {
+    sidebar.classList.toggle('show');
+    sidebar.classList.toggle('hidden');
+});
+
+// Close modals
+document.querySelectorAll('.close-btn').forEach(btn => {
     btn.addEventListener('click', () => {
         uploadModal.classList.remove('active');
-        videoModal.classList.remove('active');
+        detailModal.classList.remove('active');
     });
 });
 
-// Close modals when clicking outside
 uploadModal.addEventListener('click', (e) => {
     if (e.target === uploadModal) {
         uploadModal.classList.remove('active');
     }
 });
 
-videoModal.addEventListener('click', (e) => {
-    if (e.target === videoModal) {
-        videoModal.classList.remove('active');
+detailModal.addEventListener('click', (e) => {
+    if (e.target === detailModal) {
+        detailModal.classList.remove('active');
     }
 });
 
@@ -166,8 +184,27 @@ uploadBtn.addEventListener('click', () => {
     uploadModal.classList.add('active');
 });
 
+// Upload type selector
+document.querySelectorAll('.type-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentUploadType = btn.dataset.type;
+        updateFileAccept();
+    });
+});
+
+function updateFileAccept() {
+    const accepts = {
+        video: 'video/*',
+        document: '.pdf,.doc,.docx,.txt,.rtf,.odt',
+        image: 'image/*'
+    };
+    contentFile.setAttribute('accept', accepts[currentUploadType] || '*');
+}
+
 // File input change
-videoFile.addEventListener('change', (e) => {
+contentFile.addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (file) {
         const size = (file.size / (1024 * 1024)).toFixed(2);
@@ -180,50 +217,90 @@ videoFile.addEventListener('change', (e) => {
 uploadForm.addEventListener('submit', async (e) => {
     e.preventDefault();
 
-    const file = videoFile.files[0];
-    const title = document.getElementById('videoTitle').value;
-    const description = document.getElementById('videoDescription').value;
+    const file = contentFile.files[0];
+    const title = document.getElementById('contentTitle').value;
+    const description = document.getElementById('contentDescription').value;
+    const category = document.getElementById('contentCategory').value;
 
     if (!file) {
-        showToast('Please select a video file');
+        showToast('Please select a file');
         return;
     }
 
     showLoading(true);
 
     try {
-        // Convert video to base64
-        const videoBase64 = await fileToBase64(file);
+        const fileData = await fileToBase64(file);
+        const fileType = getFileType(file);
 
-        // Generate thumbnail
-        const thumbnail = await generateThumbnail(file);
+        let thumbnail = null;
+        if (fileType === 'video') {
+            thumbnail = await generateVideoThumbnail(file);
+        } else if (fileType === 'image') {
+            thumbnail = fileData;
+        } else {
+            thumbnail = getDocumentIcon(file.name);
+        }
 
-        const videoData = {
+        const contentData = {
             title,
             description,
-            videoData: videoBase64,
+            category,
+            type: fileType,
+            fileData,
+            fileName: file.name,
+            fileType: file.type,
             thumbnail,
             timestamp: Date.now(),
             date: new Date().toLocaleDateString()
         };
 
-        await addVideo(videoData);
+        await addContent(contentData);
 
         showLoading(false);
         uploadModal.classList.remove('active');
         uploadForm.reset();
         fileInfo.classList.remove('active');
 
-        showToast('Video uploaded successfully!');
-        loadVideos();
+        showToast(`${fileType.charAt(0).toUpperCase() + fileType.slice(1)} uploaded successfully!`);
+        loadContent();
     } catch (error) {
-        console.error('Error uploading video:', error);
+        console.error('Error uploading:', error);
         showLoading(false);
-        showToast('Error uploading video. File might be too large.');
+        showToast('Error uploading file. File might be too large.');
     }
 });
 
-// Convert file to base64
+// Get file type
+function getFileType(file) {
+    if (file.type.startsWith('video/')) return 'video';
+    if (file.type.startsWith('image/')) return 'image';
+    if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) return 'pdf';
+    return 'document';
+}
+
+// Get document icon
+function getDocumentIcon(fileName) {
+    const ext = fileName.split('.').pop().toLowerCase();
+    const icons = {
+        'pdf': 'fa-file-pdf',
+        'doc': 'fa-file-word',
+        'docx': 'fa-file-word',
+        'txt': 'fa-file-alt',
+        'rtf': 'fa-file-alt',
+        'xls': 'fa-file-excel',
+        'xlsx': 'fa-file-excel',
+        'ppt': 'fa-file-powerpoint',
+        'pptx': 'fa-file-powerpoint',
+        'zip': 'fa-file-archive',
+        'rar': 'fa-file-archive'
+    };
+
+    const iconClass = icons[ext] || 'fa-file';
+    return `<i class="fas ${iconClass}"></i>`;
+}
+
+// File to base64
 function fileToBase64(file) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -234,17 +311,16 @@ function fileToBase64(file) {
 }
 
 // Generate video thumbnail
-function generateThumbnail(file) {
+function generateVideoThumbnail(file) {
     return new Promise((resolve, reject) => {
         const video = document.createElement('video');
         const canvas = document.createElement('canvas');
-        const context = canvas.context('2d');
 
         video.preload = 'metadata';
         video.src = URL.createObjectURL(file);
 
         video.onloadedmetadata = () => {
-            video.currentTime = 1; // Get frame at 1 second
+            video.currentTime = Math.min(1, video.duration / 2);
         };
 
         video.onseeked = () => {
@@ -260,58 +336,108 @@ function generateThumbnail(file) {
 
         video.onerror = () => {
             URL.revokeObjectURL(video.src);
-            // Return a placeholder if thumbnail generation fails
-            resolve('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="300"%3E%3Crect fill="%23667eea" width="400" height="300"/%3E%3Ctext fill="white" font-size="40" x="50%25" y="50%25" text-anchor="middle" dominant-baseline="middle"%3EVideo%3C/text%3E%3C/svg%3E');
+            resolve(null);
         };
     });
 }
 
-// Load and display videos
-async function loadVideos() {
+// Load and display content
+async function loadContent(filter = currentFilter, category = currentCategory, searchTerm = '') {
     try {
-        const videos = await getAllVideos();
+        allContentItems = await getAllContent();
 
-        if (videos.length === 0) {
-            noVideos.style.display = 'block';
-            videoGrid.style.display = 'none';
+        let filtered = allContentItems;
+
+        // Apply filters
+        if (filter === 'videos') {
+            filtered = filtered.filter(item => item.type === 'video');
+        } else if (filter === 'documents') {
+            filtered = filtered.filter(item => ['document', 'pdf'].includes(item.type));
+        } else if (filter === 'images') {
+            filtered = filtered.filter(item => item.type === 'image');
+        } else if (filter === 'pdfs') {
+            filtered = filtered.filter(item => item.type === 'pdf');
+        } else if (filter === 'liked') {
+            const likedIds = [];
+            for (const item of allContentItems) {
+                const likes = await getLikes(item.id);
+                if (likes.liked) likedIds.push(item.id);
+            }
+            filtered = filtered.filter(item => likedIds.includes(item.id));
+        }
+
+        // Apply category filter
+        if (category) {
+            filtered = filtered.filter(item => item.category === category);
+        }
+
+        // Apply search filter
+        if (searchTerm) {
+            const term = searchTerm.toLowerCase();
+            filtered = filtered.filter(item =>
+                item.title.toLowerCase().includes(term) ||
+                item.description.toLowerCase().includes(term)
+            );
+        }
+
+        if (filtered.length === 0) {
+            noContent.style.display = 'block';
+            contentGrid.style.display = 'none';
             return;
         }
 
-        noVideos.style.display = 'none';
-        videoGrid.style.display = 'grid';
-        videoGrid.innerHTML = '';
+        noContent.style.display = 'none';
+        contentGrid.style.display = 'grid';
+        contentGrid.innerHTML = '';
 
         // Sort by timestamp (newest first)
-        videos.sort((a, b) => b.timestamp - a.timestamp);
+        filtered.sort((a, b) => b.timestamp - a.timestamp);
 
-        for (const video of videos) {
-            const likes = await getLikes(video.id);
-            const card = createVideoCard(video, likes);
-            videoGrid.appendChild(card);
+        for (const item of filtered) {
+            const likes = await getLikes(item.id);
+            const card = createContentCard(item, likes);
+            contentGrid.appendChild(card);
         }
     } catch (error) {
-        console.error('Error loading videos:', error);
-        showToast('Error loading videos');
+        console.error('Error loading content:', error);
+        showToast('Error loading content');
     }
 }
 
-// Create video card element
-function createVideoCard(video, likes) {
+// Create content card
+function createContentCard(item, likes) {
     const card = document.createElement('div');
-    card.className = 'video-card';
-    card.onclick = () => openVideoDetail(video.id);
+    card.className = 'content-card';
+    card.onclick = () => openContentDetail(item.id);
+
+    const thumbnailHtml = item.thumbnail && !item.thumbnail.startsWith('<i')
+        ? `<img src="${item.thumbnail}" alt="${item.title}" class="content-thumbnail">`
+        : `<div class="content-thumbnail" style="display: flex; align-items: center; justify-content: center; font-size: 3rem; color: rgba(255,255,255,0.5);">${item.thumbnail || '<i class="fas fa-file"></i>'}</div>`;
+
+    const typeIcons = {
+        video: 'fa-video',
+        image: 'fa-image',
+        pdf: 'fa-file-pdf',
+        document: 'fa-file-alt'
+    };
 
     card.innerHTML = `
-        <img src="${video.thumbnail}" alt="${video.title}" class="video-thumbnail">
-        <div class="video-card-content">
-            <h3 class="video-card-title">${escapeHtml(video.title)}</h3>
-            <p class="video-card-description">${escapeHtml(video.description)}</p>
-            <div class="video-card-meta">
-                <span class="video-card-likes">
-                    <i class="fas fa-heart"></i>
-                    ${likes.count}
-                </span>
-                <span>${video.date}</span>
+        ${thumbnailHtml}
+        <div class="content-card-body">
+            <div class="content-card-header">
+                <div class="card-icon">
+                    <i class="fas ${typeIcons[item.type] || 'fa-file'}"></i>
+                </div>
+                <div class="card-info">
+                    <h3 class="card-title">${escapeHtml(item.title)}</h3>
+                    <div class="card-meta">
+                        <span class="card-type-badge">${item.type.toUpperCase()}</span>
+                        <span class="separator">•</span>
+                        <span><i class="fas fa-heart"></i> ${likes.count}</span>
+                        <span class="separator">•</span>
+                        <span>${item.date}</span>
+                    </div>
+                </div>
             </div>
         </div>
     `;
@@ -319,22 +445,50 @@ function createVideoCard(video, likes) {
     return card;
 }
 
-// Open video detail modal
-let currentVideoId = null;
-
-async function openVideoDetail(videoId) {
-    currentVideoId = videoId;
+// Open content detail
+async function openContentDetail(contentId) {
+    currentContentId = contentId;
 
     try {
-        const video = await getVideo(videoId);
-        const likes = await getLikes(videoId);
-        const comments = await getComments(videoId);
+        const item = await getContent(contentId);
+        const likes = await getLikes(contentId);
+        const comments = await getComments(contentId);
 
-        // Set video details
-        document.getElementById('detailVideo').src = video.videoData;
-        document.getElementById('detailTitle').textContent = video.title;
-        document.getElementById('detailDescription').textContent = video.description;
-        document.getElementById('detailDate').textContent = `Uploaded on ${video.date}`;
+        // Hide all viewers first
+        document.getElementById('detailVideo').style.display = 'none';
+        document.getElementById('detailImage').style.display = 'none';
+        document.getElementById('detailDocument').style.display = 'none';
+        document.getElementById('detailDocumentPreview').style.display = 'none';
+
+        // Show appropriate viewer
+        if (item.type === 'video') {
+            const videoEl = document.getElementById('detailVideo');
+            videoEl.src = item.fileData;
+            videoEl.style.display = 'block';
+        } else if (item.type === 'image') {
+            const imgEl = document.getElementById('detailImage');
+            imgEl.src = item.fileData;
+            imgEl.style.display = 'block';
+        } else if (item.type === 'pdf') {
+            const iframeEl = document.getElementById('detailDocument');
+            iframeEl.src = item.fileData;
+            iframeEl.style.display = 'block';
+        } else {
+            const previewEl = document.getElementById('detailDocumentPreview');
+            previewEl.querySelector('i').className = `fas ${getDocumentIconClass(item.fileName)}`;
+            previewEl.style.display = 'flex';
+        }
+
+        // Set download link
+        const downloadLink = document.getElementById('downloadLink');
+        downloadLink.href = item.fileData;
+        downloadLink.download = item.fileName;
+
+        // Set content details
+        document.getElementById('detailTitle').textContent = item.title;
+        document.getElementById('detailDescription').textContent = item.description || 'No description provided.';
+        document.getElementById('detailDate').textContent = `Uploaded on ${item.date}`;
+        document.getElementById('detailCategory').textContent = item.category.charAt(0).toUpperCase() + item.category.slice(1);
 
         // Set likes
         const likeBtn = document.getElementById('likeBtn');
@@ -352,24 +506,41 @@ async function openVideoDetail(videoId) {
         // Load comments
         displayComments(comments);
 
-        videoModal.classList.add('active');
+        detailModal.classList.add('active');
     } catch (error) {
-        console.error('Error opening video:', error);
-        showToast('Error loading video');
+        console.error('Error opening content:', error);
+        showToast('Error loading content');
     }
+}
+
+function getDocumentIconClass(fileName) {
+    const ext = fileName.split('.').pop().toLowerCase();
+    const icons = {
+        'pdf': 'fa-file-pdf',
+        'doc': 'fa-file-word',
+        'docx': 'fa-file-word',
+        'txt': 'fa-file-alt',
+        'rtf': 'fa-file-alt',
+        'xls': 'fa-file-excel',
+        'xlsx': 'fa-file-excel',
+        'ppt': 'fa-file-powerpoint',
+        'pptx': 'fa-file-powerpoint'
+    };
+    return icons[ext] || 'fa-file';
 }
 
 // Display comments
 function displayComments(comments) {
     const commentsList = document.getElementById('commentsList');
+    const commentCount = document.getElementById('commentCount');
     commentsList.innerHTML = '';
+    commentCount.textContent = comments.length;
 
     if (comments.length === 0) {
         commentsList.innerHTML = '<div class="no-comments">No comments yet. Be the first to comment!</div>';
         return;
     }
 
-    // Sort by timestamp (newest first)
     comments.sort((a, b) => b.timestamp - a.timestamp);
 
     comments.forEach(comment => {
@@ -389,10 +560,10 @@ function displayComments(comments) {
 
 // Like button
 document.getElementById('likeBtn').addEventListener('click', async () => {
-    if (!currentVideoId) return;
+    if (!currentContentId) return;
 
     try {
-        const likes = await toggleLike(currentVideoId);
+        const likes = await toggleLike(currentContentId);
         const likeBtn = document.getElementById('likeBtn');
         const likeCount = document.getElementById('likeCount');
 
@@ -408,8 +579,7 @@ document.getElementById('likeBtn').addEventListener('click', async () => {
             showToast('Removed from favorites');
         }
 
-        // Reload videos to update like counts
-        loadVideos();
+        loadContent();
     } catch (error) {
         console.error('Error toggling like:', error);
         showToast('Error updating like');
@@ -425,10 +595,15 @@ document.getElementById('shareBtn').addEventListener('click', () => {
             url: window.location.href
         }).catch(() => {});
     } else {
-        // Fallback - copy to clipboard
         navigator.clipboard.writeText(window.location.href);
         showToast('Link copied to clipboard!');
     }
+});
+
+// Download button
+document.getElementById('downloadBtn').addEventListener('click', () => {
+    document.getElementById('downloadLink').click();
+    showToast('Download started!');
 });
 
 // Comment functionality
@@ -436,12 +611,12 @@ document.getElementById('commentBtn').addEventListener('click', async () => {
     const commentInput = document.getElementById('commentInput');
     const text = commentInput.value.trim();
 
-    if (!text || !currentVideoId) return;
+    if (!text || !currentContentId) return;
 
     try {
         const commentData = {
-            videoId: currentVideoId,
-            author: 'Anonymous User', // You can add user authentication later
+            contentId: currentContentId,
+            author: 'Anonymous User',
             text,
             timestamp: Date.now(),
             date: new Date().toLocaleString()
@@ -450,8 +625,7 @@ document.getElementById('commentBtn').addEventListener('click', async () => {
         await addComment(commentData);
         commentInput.value = '';
 
-        // Reload comments
-        const comments = await getComments(currentVideoId);
+        const comments = await getComments(currentContentId);
         displayComments(comments);
 
         showToast('Comment added!');
@@ -461,10 +635,72 @@ document.getElementById('commentBtn').addEventListener('click', async () => {
     }
 });
 
-// Allow Enter key to submit comment
 document.getElementById('commentInput').addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
         document.getElementById('commentBtn').click();
+    }
+});
+
+// Filter chips
+document.querySelectorAll('.filter-chips .chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+        document.querySelectorAll('.filter-chips .chip').forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+        currentFilter = chip.dataset.filter;
+        currentCategory = null;
+        loadContent(currentFilter);
+    });
+});
+
+// Sidebar navigation
+document.querySelectorAll('.sidebar-item[data-filter]').forEach(item => {
+    item.addEventListener('click', (e) => {
+        e.preventDefault();
+        document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
+        item.classList.add('active');
+        currentFilter = item.dataset.filter;
+        currentCategory = null;
+
+        // Update chips
+        const chipFilter = currentFilter === 'videos' ? 'videos' :
+                          currentFilter === 'documents' ? 'documents' :
+                          currentFilter === 'liked' ? 'all' : 'all';
+        document.querySelectorAll('.filter-chips .chip').forEach(c => c.classList.remove('active'));
+        document.querySelector(`.filter-chips .chip[data-filter="${chipFilter}"]`)?.classList.add('active');
+
+        loadContent(currentFilter);
+    });
+});
+
+document.querySelectorAll('.sidebar-item[data-category]').forEach(item => {
+    item.addEventListener('click', (e) => {
+        e.preventDefault();
+        document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
+        item.classList.add('active');
+        currentFilter = 'all';
+        currentCategory = item.dataset.category;
+
+        document.querySelectorAll('.filter-chips .chip').forEach(c => c.classList.remove('active'));
+        document.querySelector('.filter-chips .chip[data-filter="all"]')?.classList.add('active');
+
+        loadContent(currentFilter, currentCategory);
+    });
+});
+
+// Search functionality
+function performSearch() {
+    const searchTerm = searchInput.value.trim();
+    loadContent(currentFilter, currentCategory, searchTerm);
+
+    if (searchTerm) {
+        showToast(`Searching for "${searchTerm}"`);
+    }
+}
+
+searchBtn.addEventListener('click', performSearch);
+searchInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+        performSearch();
     }
 });
 
@@ -496,7 +732,7 @@ function escapeHtml(text) {
 async function init() {
     try {
         await initDB();
-        await loadVideos();
+        await loadContent();
         console.log('FreeView initialized successfully!');
     } catch (error) {
         console.error('Error initializing app:', error);
@@ -504,7 +740,6 @@ async function init() {
     }
 }
 
-// Start the app when DOM is loaded
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
 } else {

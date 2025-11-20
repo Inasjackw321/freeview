@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FreeView - Video Sharing Platform</title>
+    <title>FreeView - Video & Document Sharing</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -17,87 +17,209 @@
         <div class="bubble"></div>
     </div>
 
-    <!-- Header -->
-    <header class="glass-header">
-        <div class="container">
-            <h1 class="logo">
-                <i class="fas fa-video"></i>
-                FreeView
-            </h1>
+    <!-- Top Navigation Bar -->
+    <nav class="top-nav glass-nav">
+        <div class="nav-left">
+            <button class="menu-toggle" id="menuToggle">
+                <i class="fas fa-bars"></i>
+            </button>
+            <div class="logo">
+                <i class="fas fa-play-circle"></i>
+                <span>FreeView</span>
+            </div>
+        </div>
+        <div class="nav-center">
+            <div class="search-container">
+                <input type="text" id="searchInput" placeholder="Search videos and documents...">
+                <button class="search-btn" id="searchBtn">
+                    <i class="fas fa-search"></i>
+                </button>
+            </div>
+        </div>
+        <div class="nav-right">
             <button class="upload-btn" id="uploadBtn">
-                <i class="fas fa-upload"></i>
-                Upload Video
+                <i class="fas fa-plus"></i>
+                <span>Create</span>
             </button>
         </div>
-    </header>
+    </nav>
+
+    <!-- Sidebar -->
+    <aside class="sidebar glass-sidebar" id="sidebar">
+        <div class="sidebar-section">
+            <a href="#" class="sidebar-item active" data-filter="all">
+                <i class="fas fa-home"></i>
+                <span>Home</span>
+            </a>
+            <a href="#" class="sidebar-item" data-filter="videos">
+                <i class="fas fa-video"></i>
+                <span>Videos</span>
+            </a>
+            <a href="#" class="sidebar-item" data-filter="documents">
+                <i class="fas fa-file-alt"></i>
+                <span>Documents</span>
+            </a>
+        </div>
+        <div class="sidebar-divider"></div>
+        <div class="sidebar-section">
+            <a href="#" class="sidebar-item" data-filter="liked">
+                <i class="fas fa-heart"></i>
+                <span>Liked</span>
+            </a>
+        </div>
+        <div class="sidebar-divider"></div>
+        <div class="sidebar-section">
+            <div class="sidebar-label">CATEGORIES</div>
+            <a href="#" class="sidebar-item" data-category="education">
+                <i class="fas fa-graduation-cap"></i>
+                <span>Education</span>
+            </a>
+            <a href="#" class="sidebar-item" data-category="entertainment">
+                <i class="fas fa-gamepad"></i>
+                <span>Entertainment</span>
+            </a>
+            <a href="#" class="sidebar-item" data-category="music">
+                <i class="fas fa-music"></i>
+                <span>Music</span>
+            </a>
+            <a href="#" class="sidebar-item" data-category="technology">
+                <i class="fas fa-laptop-code"></i>
+                <span>Technology</span>
+            </a>
+        </div>
+    </aside>
 
     <!-- Main Content -->
-    <main class="container main-content">
-        <!-- Upload Modal -->
-        <div class="modal" id="uploadModal">
-            <div class="modal-content glass-card">
-                <span class="close-btn">&times;</span>
-                <h2>Upload Your Video</h2>
-                <form id="uploadForm">
-                    <div class="form-group">
-                        <label for="videoFile">Choose Video File</label>
-                        <input type="file" id="videoFile" accept="video/*" required>
-                        <div class="file-info" id="fileInfo"></div>
-                    </div>
-                    <div class="form-group">
-                        <label for="videoTitle">Title</label>
-                        <input type="text" id="videoTitle" placeholder="Enter video title" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="videoDescription">Description</label>
-                        <textarea id="videoDescription" placeholder="Enter video description" rows="4"></textarea>
-                    </div>
-                    <button type="submit" class="submit-btn">
-                        <i class="fas fa-check"></i>
-                        Upload
-                    </button>
-                </form>
-            </div>
+    <main class="main-container">
+        <!-- Filter Chips -->
+        <div class="filter-chips">
+            <button class="chip active" data-filter="all">All</button>
+            <button class="chip" data-filter="videos">Videos</button>
+            <button class="chip" data-filter="documents">Documents</button>
+            <button class="chip" data-filter="images">Images</button>
+            <button class="chip" data-filter="pdfs">PDFs</button>
         </div>
 
-        <!-- Video Grid -->
-        <div class="videos-section">
-            <h2 class="section-title">Recent Videos</h2>
-            <div class="video-grid" id="videoGrid">
-                <!-- Videos will be dynamically added here -->
-            </div>
-            <div class="no-videos" id="noVideos">
-                <i class="fas fa-film"></i>
-                <p>No videos yet. Be the first to upload!</p>
-            </div>
+        <!-- Content Grid -->
+        <div class="content-grid" id="contentGrid">
+            <!-- Content will be dynamically added here -->
         </div>
 
-        <!-- Video Detail Modal -->
-        <div class="modal" id="videoModal">
-            <div class="modal-content glass-card video-detail-modal">
-                <span class="close-btn" id="closeVideoModal">&times;</span>
-                <div class="video-detail">
-                    <video id="detailVideo" controls></video>
-                    <div class="video-info">
-                        <h2 id="detailTitle"></h2>
-                        <div class="video-actions">
-                            <button class="action-btn like-btn" id="likeBtn">
-                                <i class="far fa-heart"></i>
-                                <span id="likeCount">0</span>
-                            </button>
-                            <button class="action-btn share-btn" id="shareBtn">
-                                <i class="fas fa-share"></i>
-                                Share
-                            </button>
-                        </div>
-                        <p class="video-description" id="detailDescription"></p>
-                        <p class="video-date" id="detailDate"></p>
+        <div class="no-content" id="noContent">
+            <i class="fas fa-inbox"></i>
+            <p>No content yet. Upload something to get started!</p>
+        </div>
+    </main>
+
+    <!-- Upload Modal -->
+    <div class="modal" id="uploadModal">
+        <div class="modal-content glass-card upload-modal">
+            <span class="close-btn">&times;</span>
+            <h2>Upload Content</h2>
+
+            <div class="upload-type-selector">
+                <button class="type-btn active" data-type="video">
+                    <i class="fas fa-video"></i>
+                    <span>Video</span>
+                </button>
+                <button class="type-btn" data-type="document">
+                    <i class="fas fa-file-alt"></i>
+                    <span>Document</span>
+                </button>
+                <button class="type-btn" data-type="image">
+                    <i class="fas fa-image"></i>
+                    <span>Image</span>
+                </button>
+            </div>
+
+            <form id="uploadForm">
+                <div class="form-group">
+                    <label for="contentFile">Choose File</label>
+                    <input type="file" id="contentFile" required>
+                    <div class="file-info" id="fileInfo"></div>
+                </div>
+                <div class="form-group">
+                    <label for="contentTitle">Title</label>
+                    <input type="text" id="contentTitle" placeholder="Enter title" required>
+                </div>
+                <div class="form-group">
+                    <label for="contentDescription">Description</label>
+                    <textarea id="contentDescription" placeholder="Enter description" rows="4"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="contentCategory">Category</label>
+                    <select id="contentCategory">
+                        <option value="general">General</option>
+                        <option value="education">Education</option>
+                        <option value="entertainment">Entertainment</option>
+                        <option value="music">Music</option>
+                        <option value="technology">Technology</option>
+                    </select>
+                </div>
+                <button type="submit" class="submit-btn">
+                    <i class="fas fa-upload"></i>
+                    Upload
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Detail Modal -->
+    <div class="modal" id="detailModal">
+        <div class="modal-content glass-card detail-modal">
+            <span class="close-btn" id="closeDetailModal">&times;</span>
+            <div class="detail-container">
+                <!-- Content Viewer -->
+                <div class="content-viewer">
+                    <video id="detailVideo" controls style="display: none;"></video>
+                    <img id="detailImage" style="display: none;">
+                    <iframe id="detailDocument" style="display: none;"></iframe>
+                    <div id="detailDocumentPreview" class="document-preview" style="display: none;">
+                        <i class="fas fa-file-alt"></i>
+                        <p>Document Preview</p>
+                        <a id="downloadLink" class="download-btn" download>
+                            <i class="fas fa-download"></i>
+                            Download File
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Content Info -->
+                <div class="content-info-section">
+                    <h2 id="detailTitle"></h2>
+                    <div class="content-meta">
+                        <span id="detailDate"></span>
+                        <span class="separator">•</span>
+                        <span id="detailCategory"></span>
+                    </div>
+
+                    <div class="action-buttons">
+                        <button class="action-btn like-btn" id="likeBtn">
+                            <i class="far fa-heart"></i>
+                            <span id="likeCount">0</span>
+                        </button>
+                        <button class="action-btn" id="shareBtn">
+                            <i class="fas fa-share"></i>
+                            <span>Share</span>
+                        </button>
+                        <button class="action-btn" id="downloadBtn">
+                            <i class="fas fa-download"></i>
+                            <span>Download</span>
+                        </button>
+                    </div>
+
+                    <div class="description-box">
+                        <h3>Description</h3>
+                        <p id="detailDescription"></p>
                     </div>
 
                     <!-- Comments Section -->
                     <div class="comments-section">
-                        <h3>Comments</h3>
+                        <h3><span id="commentCount">0</span> Comments</h3>
                         <div class="comment-form">
+                            <div class="avatar">
+                                <i class="fas fa-user-circle"></i>
+                            </div>
                             <input type="text" id="commentInput" placeholder="Add a comment...">
                             <button id="commentBtn">
                                 <i class="fas fa-paper-plane"></i>
@@ -110,7 +232,7 @@
                 </div>
             </div>
         </div>
-    </main>
+    </div>
 
     <!-- Loading Spinner -->
     <div class="loading-spinner" id="loadingSpinner">
