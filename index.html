@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FreeView - Video Sharing Platform</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- Background Animation -->
+    <div class="background-animation">
+        <div class="bubble"></div>
+        <div class="bubble"></div>
+        <div class="bubble"></div>
+        <div class="bubble"></div>
+        <div class="bubble"></div>
+    </div>
+
+    <!-- Header -->
+    <header class="glass-header">
+        <div class="container">
+            <h1 class="logo">
+                <i class="fas fa-video"></i>
+                FreeView
+            </h1>
+            <button class="upload-btn" id="uploadBtn">
+                <i class="fas fa-upload"></i>
+                Upload Video
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container main-content">
+        <!-- Upload Modal -->
+        <div class="modal" id="uploadModal">
+            <div class="modal-content glass-card">
+                <span class="close-btn">&times;</span>
+                <h2>Upload Your Video</h2>
+                <form id="uploadForm">
+                    <div class="form-group">
+                        <label for="videoFile">Choose Video File</label>
+                        <input type="file" id="videoFile" accept="video/*" required>
+                        <div class="file-info" id="fileInfo"></div>
+                    </div>
+                    <div class="form-group">
+                        <label for="videoTitle">Title</label>
+                        <input type="text" id="videoTitle" placeholder="Enter video title" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="videoDescription">Description</label>
+                        <textarea id="videoDescription" placeholder="Enter video description" rows="4"></textarea>
+                    </div>
+                    <button type="submit" class="submit-btn">
+                        <i class="fas fa-check"></i>
+                        Upload
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Video Grid -->
+        <div class="videos-section">
+            <h2 class="section-title">Recent Videos</h2>
+            <div class="video-grid" id="videoGrid">
+                <!-- Videos will be dynamically added here -->
+            </div>
+            <div class="no-videos" id="noVideos">
+                <i class="fas fa-film"></i>
+                <p>No videos yet. Be the first to upload!</p>
+            </div>
+        </div>
+
+        <!-- Video Detail Modal -->
+        <div class="modal" id="videoModal">
+            <div class="modal-content glass-card video-detail-modal">
+                <span class="close-btn" id="closeVideoModal">&times;</span>
+                <div class="video-detail">
+                    <video id="detailVideo" controls></video>
+                    <div class="video-info">
+                        <h2 id="detailTitle"></h2>
+                        <div class="video-actions">
+                            <button class="action-btn like-btn" id="likeBtn">
+                                <i class="far fa-heart"></i>
+                                <span id="likeCount">0</span>
+                            </button>
+                            <button class="action-btn share-btn" id="shareBtn">
+                                <i class="fas fa-share"></i>
+                                Share
+                            </button>
+                        </div>
+                        <p class="video-description" id="detailDescription"></p>
+                        <p class="video-date" id="detailDate"></p>
+                    </div>
+
+                    <!-- Comments Section -->
+                    <div class="comments-section">
+                        <h3>Comments</h3>
+                        <div class="comment-form">
+                            <input type="text" id="commentInput" placeholder="Add a comment...">
+                            <button id="commentBtn">
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                        <div class="comments-list" id="commentsList">
+                            <!-- Comments will be dynamically added here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Loading Spinner -->
+    <div class="loading-spinner" id="loadingSpinner">
+        <div class="spinner"></div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div class="toast" id="toast">
+        <i class="fas fa-check-circle"></i>
+        <span id="toastMessage"></span>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
