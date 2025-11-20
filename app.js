@@ -1,7 +1,7 @@
 // IndexedDB setup
 let db;
 const DB_NAME = 'FreeViewDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 // Initialize IndexedDB
 function initDB() {
