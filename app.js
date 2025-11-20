@@ -63,6 +63,14 @@ const chatMessages = document.getElementById('chatMessages');
 const imagePreviewModal = document.getElementById('imagePreviewModal');
 const previewImage = document.getElementById('previewImage');
 const closePreviewModal = document.getElementById('closePreviewModal');
+const typingIndicator = document.getElementById('typingIndicator');
+const scrollToBottomBtn = document.getElementById('scrollToBottom');
+const messageCountEl = document.getElementById('messageCount');
+
+// State
+let typingTimeout;
+let isUserScrolling = false;
+let messageReactions = {}; // Store reactions per message ID
 
 // Send text message
 async function sendMessage() {
@@ -83,7 +91,7 @@ async function sendMessage() {
         await addMessage(messageData);
         messageInput.value = '';
 
-        await loadMessages();
+        await loadMessages(true); // Play sound
         scrollToBottom();
 
         showLoading(false);
@@ -118,7 +126,7 @@ async function sendImage(file) {
             };
 
             await addMessage(messageData);
-            await loadMessages();
+            await loadMessages(true); // Play sound
             scrollToBottom();
             showLoading(false);
             showToast('Image sent!');
@@ -136,13 +144,15 @@ async function sendImage(file) {
 }
 
 // Load and display messages
-async function loadMessages() {
+async function loadMessages(shouldPlaySound = false) {
     try {
         const messages = await getAllMessages();
 
         // Sort by timestamp
         messages.sort((a, b) => a.timestamp - b.timestamp);
 
+        // Clear messages but keep typing indicator
+        const typingEl = chatMessages.querySelector('.typing-indicator');
         chatMessages.innerHTML = '';
 
         if (messages.length === 0) {
@@ -152,6 +162,8 @@ async function loadMessages() {
                     <p>No messages yet. Start the conversation!</p>
                 </div>
             `;
+            if (typingEl) chatMessages.appendChild(typingEl);
+            updateMessageCount(0);
             return;
         }
 
@@ -159,6 +171,17 @@ async function loadMessages() {
             const messageEl = createMessageElement(message);
             chatMessages.appendChild(messageEl);
         });
+
+        // Re-append typing indicator
+        if (typingEl) chatMessages.appendChild(typingEl);
+
+        // Update message count
+        updateMessageCount(messages.length);
+
+        // Play sound for new message
+        if (shouldPlaySound) {
+            playSoundEffect('message');
+        }
 
     } catch (error) {
         console.error('Error loading messages:', error);
@@ -170,6 +193,7 @@ async function loadMessages() {
 function createMessageElement(message) {
     const messageDiv = document.createElement('div');
     messageDiv.className = 'message';
+    messageDiv.dataset.id = message.id;
 
     // Random color for avatar
     const colors = ['#667eea', '#764ba2', '#f093fb', '#4ade80', '#fbbf24', '#f87171', '#60a5fa', '#a78bfa'];
@@ -185,12 +209,6 @@ function createMessageElement(message) {
     if (message.text) {
         contentHtml += `<div class="message-text">${escapeHtml(message.text)}</div>`;
     }
-    if (message.image) {
-        const img = document.createElement('img');
-        img.src = message.image;
-        img.className = 'message-image';
-        img.onclick = () => previewImageFull(message.image);
-    }
 
     messageDiv.innerHTML = `
         ${avatarHtml}
@@ -204,15 +222,81 @@ function createMessageElement(message) {
         </div>
     `;
 
-    // Add image if exists
+    const messageContent = messageDiv.querySelector('.message-content');
+
+    // Add blurred image with reveal button if exists
     if (message.image) {
-        const img = messageDiv.querySelector('.message-content').appendChild(document.createElement('img'));
+        const imageContainer = document.createElement('div');
+        imageContainer.className = 'message-image-container';
+
+        const img = document.createElement('img');
         img.src = message.image;
-        img.className = 'message-image';
-        img.onclick = () => previewImageFull(message.image);
+        img.className = 'message-image blurred';
+
+        const revealBtn = document.createElement('button');
+        revealBtn.className = 'reveal-image-btn';
+        revealBtn.innerHTML = '<i class="fas fa-eye"></i> See Image';
+        revealBtn.onclick = () => revealImage(img, revealBtn);
+
+        imageContainer.appendChild(img);
+        imageContainer.appendChild(revealBtn);
+        messageContent.appendChild(imageContainer);
     }
 
+    // Add reaction buttons
+    const reactionsDiv = document.createElement('div');
+    reactionsDiv.className = 'message-reactions';
+    const emojis = ['❤️', '😂', '🔥', '👍', '😮'];
+
+    emojis.forEach(emoji => {
+        const reactionBtn = document.createElement('span');
+        reactionBtn.className = 'reaction';
+        reactionBtn.innerHTML = `${emoji} <span class="reaction-count">0</span>`;
+        reactionBtn.onclick = () => addReaction(message.id, emoji, reactionBtn);
+        reactionsDiv.appendChild(reactionBtn);
+    });
+
+    messageContent.appendChild(reactionsDiv);
+
     return messageDiv;
+}
+
+// Reveal blurred image
+function revealImage(img, btn) {
+    img.classList.remove('blurred');
+    btn.style.display = 'none';
+    img.onclick = () => previewImageFull(img.src);
+    playSoundEffect('reveal');
+}
+
+// Add reaction to message
+function addReaction(messageId, emoji, btn) {
+    if (!messageReactions[messageId]) {
+        messageReactions[messageId] = {};
+    }
+    if (!messageReactions[messageId][emoji]) {
+        messageReactions[messageId][emoji] = 0;
+    }
+
+    // Toggle reaction
+    if (btn.classList.contains('active')) {
+        btn.classList.remove('active');
+        messageReactions[messageId][emoji]--;
+    } else {
+        btn.classList.add('active');
+        messageReactions[messageId][emoji]++;
+        playSoundEffect('reaction');
+    }
+
+    const count = messageReactions[messageId][emoji];
+    const countEl = btn.querySelector('.reaction-count');
+    countEl.textContent = count;
+
+    if (count > 0) {
+        countEl.style.display = 'inline';
+    } else {
+        countEl.style.display = 'none';
+    }
 }
 
 // Format timestamp
@@ -248,6 +332,65 @@ function scrollToBottom() {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
+// Update message count
+function updateMessageCount(count) {
+    messageCountEl.textContent = `${count} message${count !== 1 ? 's' : ''}`;
+}
+
+// Show typing indicator
+function showTypingIndicator() {
+    typingIndicator.classList.add('active');
+    clearTimeout(typingTimeout);
+
+    typingTimeout = setTimeout(() => {
+        typingIndicator.classList.remove('active');
+    }, 1000);
+}
+
+// Check if user is at bottom
+function isAtBottom() {
+    const threshold = 100;
+    return chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight < threshold;
+}
+
+// Update scroll button visibility
+function updateScrollButton() {
+    if (isAtBottom()) {
+        scrollToBottomBtn.classList.remove('visible');
+    } else {
+        scrollToBottomBtn.classList.add('visible');
+    }
+}
+
+// Play sound effects
+function playSoundEffect(type) {
+    // Create simple beep using Web Audio API
+    try {
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+
+        if (type === 'message') {
+            oscillator.frequency.value = 800;
+            gainNode.gain.value = 0.1;
+        } else if (type === 'reaction') {
+            oscillator.frequency.value = 1200;
+            gainNode.gain.value = 0.05;
+        } else if (type === 'reveal') {
+            oscillator.frequency.value = 600;
+            gainNode.gain.value = 0.08;
+        }
+
+        oscillator.start();
+        oscillator.stop(audioContext.currentTime + 0.1);
+    } catch (e) {
+        // Silently fail if audio not supported
+    }
+}
+
 // Event listeners
 sendBtn.addEventListener('click', sendMessage);
 
@@ -255,6 +398,18 @@ messageInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
         sendMessage();
     }
+});
+
+messageInput.addEventListener('input', () => {
+    showTypingIndicator();
+});
+
+chatMessages.addEventListener('scroll', () => {
+    updateScrollButton();
+});
+
+scrollToBottomBtn.addEventListener('click', () => {
+    scrollToBottom();
 });
 
 imageBtn.addEventListener('click', () => {

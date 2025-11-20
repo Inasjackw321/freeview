@@ -34,8 +34,24 @@
             <span><i class="fas fa-comments"></i> Live Chat</span>
             <span class="online-count"><i class="fas fa-circle" style="font-size: 0.6rem; color: #4ade80;"></i> Live</span>
         </div>
-        <div class="chat-messages" id="chatMessages">
-            <!-- Messages will be inserted here -->
+        <div style="position: relative; flex: 1; overflow: hidden;">
+            <div class="message-count" id="messageCount">0 messages</div>
+            <div class="chat-messages" id="chatMessages">
+                <!-- Messages will be inserted here -->
+                <div class="typing-indicator" id="typingIndicator">
+                    <div class="message-avatar" style="background: #667eea;">
+                        <i class="fas fa-user"></i>
+                    </div>
+                    <div class="typing-dots">
+                        <div class="typing-dot"></div>
+                        <div class="typing-dot"></div>
+                        <div class="typing-dot"></div>
+                    </div>
+                </div>
+            </div>
+            <button class="scroll-to-bottom" id="scrollToBottom">
+                <i class="fas fa-arrow-down"></i>
+            </button>
         </div>
     </div>
 
